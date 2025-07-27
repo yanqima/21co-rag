@@ -32,10 +32,10 @@ This starts all services and opens the Streamlit UI at http://localhost:8501
 
 ### Document Processing
 - **File Types**: PDF, TXT, JSON (extensible to more formats)
-- **Chunking Strategies**:
-  - Fixed-size: Consistent chunks for structured documents
-  - Semantic: Paragraph-based for natural text flow
-  - Sliding window: Overlapping chunks for comprehensive coverage
+- **Chunking Strategies** (Powered by LangChain):
+  - Sliding Window (default): Character-based chunks with configurable overlap
+  - Sentence/Paragraph: Respects natural text boundaries using RecursiveCharacterTextSplitter
+  - Semantic: Uses OpenAI embeddings to create semantically coherent chunks
 - **Validation**: File size limits (50MB), format checking, content deduplication
 - **Background Processing**: Async pipeline with Redis queue
 
@@ -73,6 +73,18 @@ This starts all services and opens the Streamlit UI at http://localhost:8501
 - **Performance**: <500ms query latency, concurrent processing
 - **Deployment**: Docker multi-stage builds, Kubernetes-ready
 - **Documentation**: OpenAPI specs, comprehensive guides
+
+### Intelligent ReAct Agent (NEW)
+- **LangChain ReAct Pattern**: Reasoning and Acting agent that intelligently handles queries
+- **Available Tools**:
+  - `search_documents`: Searches uploaded documents for relevant information
+  - `get_system_info`: Retrieves system metadata (document count, list)
+- **Smart Response Logic**:
+  - Greetings → Direct response without tool use
+  - Content questions → Uses search_documents tool
+  - System queries → Uses get_system_info tool
+- **Context Aware**: Maintains conversation memory using LangChain's ConversationBufferMemory
+- **Source Attribution**: Returns relevant document chunks with relevance scores
 
 ## 🏗️ Architecture
 

@@ -65,7 +65,7 @@ class HealthResponse(BaseModel):
 async def ingest_document(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    chunking_strategy: str = "fixed",
+    chunking_strategy: str = "sliding_window",
     chunk_size: Optional[int] = None,
     chunk_overlap: Optional[int] = None
 ):
@@ -144,7 +144,7 @@ async def process_document(
         chunker = ChunkingFactory.create_strategy(
             chunking_strategy,
             chunk_size=chunk_size,
-            overlap=chunk_overlap
+            chunk_overlap=chunk_overlap
         )
         
         # Chunk the text
@@ -204,46 +204,74 @@ def extract_pdf_text(content: bytes) -> str:
 
 @router.post("/query", response_model=QueryResponse)
 async def query_documents(request: QueryRequest):
-    """Search documents and generate RAG response."""
+    """Search documents and generate RAG response using ReAct agent."""
     import time
+    from src.processing.react_agent import process_query_with_agent
+    
     start_time = time.time()
     
     try:
-        # Generate embedding for query
+        # Define search function for the agent
+        async def search_function(query_embedding, search_type, limit, filters, similarity_threshold):
+            if search_type == "vector":
+                return await vector_store.search(
+                    query_embedding=query_embedding,
+                    limit=limit,
+                    filters=filters,
+                    similarity_threshold=similarity_threshold
+                )
+            else:  # hybrid
+                return await vector_store.hybrid_search(
+                    query_embedding=query_embedding,
+                    query_text=request.query,
+                    limit=limit,
+                    filters=filters,
+                    similarity_threshold=similarity_threshold
+                )
+        
+        # Generate embedding for query (needed for search)
         query_embeddings = await embedding_generator.generate_embeddings([request.query])
         query_embedding = query_embeddings[0]["embedding"]
         
-        # Perform search based on type
-        if request.search_type == "vector":
-            results = await vector_store.search(
-                query_embedding=query_embedding,
-                limit=request.limit,
-                filters=request.filters,
-                similarity_threshold=request.similarity_threshold
+        # Prepare search parameters
+        search_params = {
+            "query_embedding": query_embedding,
+            "search_type": request.search_type,
+            "limit": request.limit,
+            "filters": request.filters,
+            "similarity_threshold": request.similarity_threshold
+        }
+        
+        # Process query with ReAct agent
+        if request.generate_answer:
+            agent_result = await process_query_with_agent(
+                query=request.query,
+                search_function=search_function,
+                search_params=search_params,
+                vector_store=vector_store
             )
-        else:  # hybrid
-            results = await vector_store.hybrid_search(
-                query_embedding=query_embedding,
-                query_text=request.query,
-                limit=request.limit,
-                filters=request.filters,
-                similarity_threshold=request.similarity_threshold
+            
+            processing_time = time.time() - start_time
+            
+            return QueryResponse(
+                results=agent_result["results"],
+                answer=agent_result["answer"],
+                total_results=agent_result["total_results"],
+                search_type=request.search_type,
+                processing_time=processing_time
             )
-        
-        # Generate answer if requested
-        answer = None
-        if request.generate_answer and results:
-            answer = await generate_rag_answer(request.query, results)
-        
-        processing_time = time.time() - start_time
-        
-        return QueryResponse(
-            results=results,
-            answer=answer,
-            total_results=len(results),
-            search_type=request.search_type,
-            processing_time=processing_time
-        )
+        else:
+            # Fallback to original search-only behavior
+            results = await search_function(**search_params)
+            processing_time = time.time() - start_time
+            
+            return QueryResponse(
+                results=results,
+                answer=None,
+                total_results=len(results),
+                search_type=request.search_type,
+                processing_time=processing_time
+            )
         
     except Exception as e:
         logger.error("query_failed", error=str(e))

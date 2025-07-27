@@ -11,6 +11,8 @@ PyPDF2==3.0.1
 tiktoken==0.5.2
 langchain==0.1.0
 langchain-community==0.0.13
+langchain-experimental==0.0.50
+langchain-openai==0.0.5
 
 # Vector storage and embeddings
 qdrant-client==1.7.0

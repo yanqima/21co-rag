@@ -22,7 +22,8 @@
       "Bash(chmod:*)",
       "Bash(pip install:*)",
       "Bash(pkill:*)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(docker-compose:*)"
     ],
     "deny": []
   }

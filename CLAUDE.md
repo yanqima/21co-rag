@@ -11,6 +11,7 @@
 ### 2. Clean Development Practices
 - **Always delete unused tests, scripts, and data files**
 - **Update README.md or documentation files when making changes**
+- **When asked to hand over, create a new markdown file in handover folder with datetime postfix**
 - Remove commented-out code before committing
 - Clean up temporary files and debugging outputs
 - Keep the output directories organized and clean
@@ -18,6 +19,10 @@
 ### 3. Automonous refactoring
 - Keep codebase as small as possible, avoid adding unnecessary features
 - Regularly refactor codebase (e.g. when you did feature updates) to keep it lean and simple
+
+### 4. Others
+- Use UV to install and manage python dependencies
+- Do not ask me to allow using CURL, just use it
 
 ---
 
