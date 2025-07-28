@@ -53,7 +53,9 @@ This starts all services and opens the Streamlit UI at http://localhost:8501
 ### API Endpoints
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/v1/ingest` | POST | Upload and process documents |
+| `/api/v1/ingest` | POST | Upload and process single document |
+| `/api/v1/batch-ingest` | POST | Upload and process multiple documents |
+| `/api/v1/jobs/{job_id}` | GET | Get batch job status |
 | `/api/v1/query` | POST | Search and generate AI answers |
 | `/api/v1/documents` | GET | List all documents |
 | `/api/v1/documents/{id}` | DELETE | Remove document |
@@ -61,7 +63,8 @@ This starts all services and opens the Streamlit UI at http://localhost:8501
 | `/api/v1/metrics` | GET | Prometheus metrics |
 
 ### Streamlit UI
-- **Document Upload**: Drag-and-drop with real-time progress
+- **Document Upload**: Single file upload with drag-and-drop
+- **Batch Upload**: Multi-file upload with progress tracking
 - **Search Interface**: Natural language queries with AI responses
 - **Document Library**: Manage uploaded documents
 - **Chat Interface**: Conversational interaction with your knowledge base
@@ -74,7 +77,7 @@ This starts all services and opens the Streamlit UI at http://localhost:8501
 - **Deployment**: Docker multi-stage builds, Kubernetes-ready
 - **Documentation**: OpenAPI specs, comprehensive guides
 
-### Intelligent ReAct Agent (NEW)
+### Intelligent ReAct Agent
 - **LangChain ReAct Pattern**: Reasoning and Acting agent that intelligently handles queries
 - **Available Tools**:
   - `search_documents`: Searches uploaded documents for relevant information
@@ -85,6 +88,18 @@ This starts all services and opens the Streamlit UI at http://localhost:8501
   - System queries → Uses get_system_info tool
 - **Context Aware**: Maintains conversation memory using LangChain's ConversationBufferMemory
 - **Source Attribution**: Returns relevant document chunks with relevance scores
+
+### Batch Document Processing (NEW)
+- **Multi-file Upload**: Process up to 100 documents in a single batch
+- **Real-time Progress Tracking**: 
+  - Live progress bar showing completion percentage
+  - Document-by-document status updates
+  - Current file being processed indicator
+- **Concurrent Processing**: Configurable concurrency limit (default: 5 documents)
+- **Job Management**: Redis-based job tracking with 24-hour TTL
+- **Configurable Delay**: Artificial processing delay for demo purposes (0-5 seconds)
+- **Error Handling**: Individual document failures don't stop the batch
+- **Progress Polling**: Auto-refresh every 2 seconds to show live updates
 
 ## 🏗️ Architecture
 

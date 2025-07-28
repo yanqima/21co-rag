@@ -31,6 +31,8 @@
 
 #### 4. API Endpoints
 - `POST /api/v1/ingest` - Single document upload
+- `POST /api/v1/batch-ingest` - Multiple document upload with job tracking
+- `GET /api/v1/jobs/{job_id}` - Get batch job status
 - `POST /api/v1/query` - Search with optional RAG generation
 - `GET /api/v1/documents` - List all documents
 - `DELETE /api/v1/documents/{id}` - Remove document
@@ -39,6 +41,7 @@
 
 #### 5. Streamlit UI
 - **Upload Documents**: Single file upload with chunking options
+- **Batch Upload**: Multi-file upload with real-time progress tracking
 - **Search & Query**: Advanced search with adjustable parameters
 - **Document Library**: View and manage documents
 - **Chat Interface**: Conversational interaction with documents
