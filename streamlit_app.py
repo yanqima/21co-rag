@@ -89,6 +89,8 @@ if 'api_base_url' not in st.session_state:
     st.session_state.api_base_url = "http://localhost:8000/api/v1"
 if 'messages' not in st.session_state:
     st.session_state.messages = []
+if 'similarity_threshold' not in st.session_state:
+    st.session_state.similarity_threshold = 0.4
 
 # Header
 st.markdown("""
@@ -111,6 +113,19 @@ with st.sidebar:
     )
     if api_url != st.session_state.api_base_url:
         st.session_state.api_base_url = api_url
+    
+    # Similarity threshold configuration
+    st.subheader("🎯 Search Settings")
+    similarity_threshold = st.slider(
+        "Default Similarity Threshold",
+        min_value=0.0,
+        max_value=1.0,
+        value=st.session_state.similarity_threshold,
+        step=0.05,
+        help="Lower values return more results, higher values return only the most similar results"
+    )
+    if similarity_threshold != st.session_state.similarity_threshold:
+        st.session_state.similarity_threshold = similarity_threshold
     
     st.divider()
     
@@ -246,7 +261,7 @@ with tab2:
             use_rag = st.checkbox("Use RAG Generation", value=True)
             search_limit = st.slider("Number of Results", 1, 20, 5)
         with col2:
-            similarity_threshold = st.slider("Similarity Threshold", 0.0, 1.0, 0.7, 0.05)
+            similarity_threshold = st.slider("Similarity Threshold", 0.0, 1.0, st.session_state.similarity_threshold, 0.05)
             search_type = st.selectbox("Search Type", ["hybrid", "vector", "keyword"], index=0)
         with col3:
             include_metadata = st.checkbox("Include Metadata", value=True)
@@ -399,8 +414,8 @@ with tab4:
                         "query": prompt,
                         "generate_answer": True,
                         "limit": 5,
-                        "similarity_threshold": 0.7,
-                        "search_type": "hybrid"
+                        "search_type": "hybrid",
+                        "similarity_threshold": st.session_state.similarity_threshold
                     }
                     
                     response = requests.post(

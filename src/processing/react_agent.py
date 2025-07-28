@@ -28,6 +28,7 @@ class DocumentSearchTool:
         try:
             results = await self.search_function(**self.search_params)
             self.last_search_results = results  # Store for source extraction
+            logger.info(f"Search found {len(results)} results for query: {query}")
             
             if not results:
                 return "No relevant documents found for this query."
@@ -213,7 +214,10 @@ Remember: When someone asks "What is X?" or any factual question, ALWAYS search 
     def _extract_sources_from_memory(self) -> List[Dict[str, Any]]:
         """Extract source information from agent memory/tool usage."""
         if self.doc_search_tool and hasattr(self.doc_search_tool, 'last_search_results'):
-            return self.doc_search_tool.last_search_results
+            results = self.doc_search_tool.last_search_results
+            logger.info(f"Extracting {len(results)} source results from memory")
+            return results
+        logger.warning("No doc_search_tool or last_search_results found")
         return []
     
     def clear_conversation_history(self):

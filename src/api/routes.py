@@ -34,7 +34,7 @@ class IngestResponse(BaseModel):
 class QueryRequest(BaseModel):
     query: str = Field(..., description="Search query")
     limit: int = Field(default=10, ge=1, le=100)
-    similarity_threshold: float = Field(default=0.7, ge=0.0, le=1.0)
+    similarity_threshold: float = Field(default=settings.similarity_threshold, ge=0.0, le=1.0)
     search_type: str = Field(default="hybrid", pattern="^(vector|keyword|hybrid)$")
     filters: Optional[Dict[str, Any]] = None
     generate_answer: bool = Field(default=True)

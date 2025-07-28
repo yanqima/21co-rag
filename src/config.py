@@ -37,7 +37,7 @@ class Settings(BaseSettings):
     embedding_dimension: int = Field(default=384, env="EMBEDDING_DIMENSION")  # SentenceTransformer all-MiniLM-L6-v2 dimension
     
     # Search Configuration
-    similarity_threshold: float = Field(default=0.7, env="SIMILARITY_THRESHOLD")
+    similarity_threshold: float = Field(default=0.4, env="SIMILARITY_THRESHOLD")
     search_limit: int = Field(default=10, env="SEARCH_LIMIT")
     hybrid_search_alpha: float = Field(default=0.5, env="HYBRID_SEARCH_ALPHA")
     

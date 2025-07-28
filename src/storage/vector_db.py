@@ -207,18 +207,23 @@ class VectorStore:
             similarity_threshold=similarity_threshold
         )
         
-        # Simple keyword matching (BM25-like scoring)
-        query_terms = set(query_text.lower().split())
+        # Improved keyword matching with partial matches
+        query_terms = query_text.lower().split()
         
         # Score and combine results
         hybrid_results = []
         for result in vector_results:
             text = result["text"].lower()
             
-            # Calculate keyword score
-            text_terms = set(text.split())
-            common_terms = query_terms.intersection(text_terms)
-            keyword_score = len(common_terms) / len(query_terms) if query_terms else 0
+            # Calculate keyword score with partial matching
+            keyword_score = 0
+            if query_terms:
+                matches = 0
+                for term in query_terms:
+                    # Check for partial matches (substring matching)
+                    if term in text:
+                        matches += 1
+                keyword_score = matches / len(query_terms)
             
             # Combine scores
             vector_score = result["score"]
