@@ -1,6 +1,7 @@
 """
 Tests for API middleware components.
 """
+import os
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
@@ -139,6 +140,26 @@ class TestRequestLoggingMiddleware:
 class TestRateLimitMiddleware:
     """Test rate limiting middleware."""
     
+    def test_rate_limiting_disabled_in_test_env(self):
+        """Test that rate limiting is disabled in test environment."""
+        # Ensure we're in test environment
+        assert os.getenv("ENVIRONMENT") == "test" or os.getenv("DISABLE_RATE_LIMIT") == "true"
+        
+        with patch('src.api.middleware.settings.rate_limit_per_minute', 1):  # Very low limit
+            app = FastAPI()
+            app.add_middleware(RateLimitMiddleware)
+            
+            @app.get("/test")
+            async def test_endpoint():
+                return {"status": "ok"}
+            
+            client = TestClient(app)
+            
+            # Make many requests - all should succeed because rate limiting is disabled
+            for i in range(10):
+                response = client.get("/test")
+                assert response.status_code == 200
+    
     def test_allows_requests_within_limit(self):
         """Test that requests within limit are allowed."""
         with patch('src.api.middleware.settings.rate_limit_per_minute', 5):
@@ -158,29 +179,9 @@ class TestRateLimitMiddleware:
     
     def test_blocks_requests_exceeding_limit(self):
         """Test that requests exceeding limit are blocked."""
-        with patch('src.api.middleware.settings.rate_limit_per_minute', 5):
-            app = FastAPI()
-            app.add_middleware(RateLimitMiddleware)
-            
-            @app.get("/test")
-            async def test_endpoint():
-                return {"status": "ok"}
-            
-            client = TestClient(app)
-            
-            # Make 5 requests to reach limit
-            for i in range(5):
-                client.get("/test")
-            
-            # 6th request should be blocked
-            response = client.get("/test")
-            assert response.status_code == 429
-            assert "Rate limit exceeded" in response.json()["error"]
-    
-    def test_rate_limit_resets_after_period(self):
-        """Test that rate limit resets after period."""
-        with patch('src.api.middleware.settings.rate_limit_per_minute', 5):
-            with patch('src.api.middleware.datetime') as mock_datetime:
+        # Temporarily override environment to test rate limiting
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "DISABLE_RATE_LIMIT": "false"}):
+            with patch('src.api.middleware.settings.rate_limit_per_minute', 5):
                 app = FastAPI()
                 app.add_middleware(RateLimitMiddleware)
                 
@@ -189,12 +190,6 @@ class TestRateLimitMiddleware:
                     return {"status": "ok"}
                 
                 client = TestClient(app)
-                current_time = time.time()
-                
-                # Mock datetime.now() to control time
-                mock_now = Mock()
-                mock_now.timestamp.return_value = current_time
-                mock_datetime.now.return_value = mock_now
                 
                 # Make 5 requests to reach limit
                 for i in range(5):
@@ -203,36 +198,67 @@ class TestRateLimitMiddleware:
                 # 6th request should be blocked
                 response = client.get("/test")
                 assert response.status_code == 429
-                
-                # Advance time past the period
-                mock_now.timestamp.return_value = current_time + 61
-                
-                # Should be allowed again
-                response = client.get("/test")
-                assert response.status_code == 200
+                assert "Rate limit exceeded" in response.json()["error"]
+    
+    def test_rate_limit_resets_after_period(self):
+        """Test that rate limit resets after period."""
+        # Temporarily override environment to test rate limiting
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "DISABLE_RATE_LIMIT": "false"}):
+            with patch('src.api.middleware.settings.rate_limit_per_minute', 5):
+                with patch('src.api.middleware.datetime') as mock_datetime:
+                    app = FastAPI()
+                    app.add_middleware(RateLimitMiddleware)
+                    
+                    @app.get("/test")
+                    async def test_endpoint():
+                        return {"status": "ok"}
+                    
+                    client = TestClient(app)
+                    current_time = time.time()
+                    
+                    # Mock datetime.now() to control time
+                    mock_now = Mock()
+                    mock_now.timestamp.return_value = current_time
+                    mock_datetime.now.return_value = mock_now
+                    
+                    # Make 5 requests to reach limit
+                    for i in range(5):
+                        client.get("/test")
+                    
+                    # 6th request should be blocked
+                    response = client.get("/test")
+                    assert response.status_code == 429
+                    
+                    # Advance time past the period
+                    mock_now.timestamp.return_value = current_time + 61
+                    
+                    # Should be allowed again
+                    response = client.get("/test")
+                    assert response.status_code == 200
     
     def test_rate_limit_per_ip(self):
         """Test that rate limiting is per IP address."""
-        # Mock the settings to use a lower limit for testing
-        with patch('src.api.middleware.settings.rate_limit_per_minute', 5):
-            # Recreate middleware with mocked settings
-            app = FastAPI()
-            app.add_middleware(RateLimitMiddleware)
-            
-            @app.get("/test")
-            async def test_endpoint():
-                return {"status": "ok"}
-            
-            client = TestClient(app)
-            
-            # Make 5 requests to reach limit
-            for i in range(5):
+        # Temporarily override environment to test rate limiting
+        with patch.dict(os.environ, {"ENVIRONMENT": "production", "DISABLE_RATE_LIMIT": "false"}):
+            with patch('src.api.middleware.settings.rate_limit_per_minute', 5):
+                # Recreate middleware with mocked settings
+                app = FastAPI()
+                app.add_middleware(RateLimitMiddleware)
+                
+                @app.get("/test")
+                async def test_endpoint():
+                    return {"status": "ok"}
+                
+                client = TestClient(app)
+                
+                # Make 5 requests to reach limit
+                for i in range(5):
+                    response = client.get("/test")
+                    assert response.status_code == 200
+                
+                # 6th request should be blocked
                 response = client.get("/test")
-                assert response.status_code == 200
-            
-            # 6th request should be blocked
-            response = client.get("/test")
-            assert response.status_code == 429
+                assert response.status_code == 429
 
 
 class TestErrorHandlerMiddleware:
