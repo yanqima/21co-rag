@@ -166,7 +166,7 @@ with st.sidebar:
         st.info("Connect to API to see stats")
 
 # Main content area with tabs
-tab1, tab2, tab3, tab4, tab5 = st.tabs(["📤 Upload Documents", "📦 Batch Upload", "🔍 Search & Query", "📚 Document Library", "💬 Chat Interface"])
+tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📤 Upload Documents", "📦 Batch Upload", "🔍 Search & Query", "📚 Document Library", "💬 Chat Interface", "📊 System Logs"])
 
 # Tab 1: Upload Documents
 with tab1:
@@ -623,6 +623,208 @@ with tab5:
                     error_msg = f"Connection error: {str(e)}"
                     st.error(error_msg)
                     st.session_state.messages.append({"role": "assistant", "content": error_msg})
+
+# Tab 6: System Logs
+with tab6:
+    st.header("System Logs")
+    st.markdown("View real-time system logs and trace requests by correlation ID.")
+    
+    # Filter options
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        correlation_id_filter = st.text_input(
+            "Filter by Correlation ID",
+            placeholder="e.g., a4f3e2d1-8b9c-4d5e-6f7a",
+            help="Enter a correlation ID to trace a specific request"
+        )
+    with col2:
+        log_level_filter = st.selectbox(
+            "Filter by Level",
+            ["All", "error", "warning", "info", "debug"],
+            help="Filter logs by severity level"
+        )
+    with col3:
+        log_limit = st.slider(
+            "Number of Logs",
+            min_value=10,
+            max_value=500,
+            value=100,
+            step=10,
+            help="Maximum number of logs to display"
+        )
+    
+    # Auto-refresh option
+    auto_refresh = st.checkbox("Auto-refresh (every 5 seconds)", value=False)
+    
+    # Refresh button
+    if st.button("🔄 Refresh Logs", type="primary", use_container_width=True) or auto_refresh:
+        try:
+            # Build query parameters
+            params = {"limit": log_limit}
+            if correlation_id_filter:
+                params["correlation_id"] = correlation_id_filter
+            if log_level_filter != "All":
+                params["level"] = log_level_filter
+            
+            # Fetch logs
+            response = requests.get(f"{st.session_state.api_base_url}/logs", params=params)
+            
+            if response.status_code == 200:
+                logs_data = response.json()
+                logs = logs_data.get("logs", [])
+                
+                # Show filter info
+                if logs_data.get("filtered_by"):
+                    st.info(f"🔍 Filtered by: {logs_data['filtered_by']}")
+                
+                st.write(f"📋 Showing {len(logs)} of {logs_data['count']} logs")
+                
+                if logs:
+                    # Create tabs for different views
+                    view1, view2, view3 = st.tabs(["📋 Table View", "📜 Timeline View", "📊 Statistics"])
+                    
+                    with view1:
+                        # Prepare data for table
+                        table_data = []
+                        for log in logs:
+                            level = log.get("level", "info")
+                            level_icon = {
+                                "error": "🔴",
+                                "warning": "🟡", 
+                                "warn": "🟡",
+                                "info": "🔵",
+                                "debug": "⚪"
+                            }.get(level.lower(), "⚪")
+                            
+                            table_data.append({
+                                "Level": f"{level_icon} {level}",
+                                "Timestamp": log.get("timestamp", ""),
+                                "Event": log.get("event", log.get("msg", "")),
+                                "Correlation ID": log.get("correlation_id", "")[:8] + "..." if log.get("correlation_id") else "",
+                                "Details": str(log)[:100] + "..."
+                            })
+                        
+                        df = pd.DataFrame(table_data)
+                        st.dataframe(
+                            df,
+                            use_container_width=True,
+                            hide_index=True,
+                            column_config={
+                                "Details": st.column_config.TextColumn(
+                                    "Details",
+                                    help="Click to expand",
+                                    max_chars=100
+                                )
+                            }
+                        )
+                        
+                        # Expandable details
+                        with st.expander("🔍 View Full Log Details"):
+                            selected_index = st.number_input(
+                                "Log Index (0-based)",
+                                min_value=0,
+                                max_value=len(logs)-1 if logs else 0,
+                                value=0,
+                                help="Enter the index of the log to view details"
+                            )
+                            if logs:
+                                st.json(logs[selected_index])
+                    
+                    with view2:
+                        # Timeline view
+                        for i, log in enumerate(logs):
+                            level = log.get("level", "info")
+                            level_color = {
+                                "error": "#ff4444",
+                                "warning": "#ffaa00", 
+                                "warn": "#ffaa00",
+                                "info": "#4444ff",
+                                "debug": "#888888"
+                            }.get(level.lower(), "#888888")
+                            
+                            timestamp = log.get("timestamp", "")
+                            event = log.get("event", log.get("msg", ""))
+                            corr_id = log.get("correlation_id", "")
+                            
+                            st.markdown(f"""
+                            <div style="border-left: 3px solid {level_color}; padding-left: 1rem; margin-bottom: 1rem;">
+                                <small style="color: #666;">{timestamp}</small><br>
+                                <strong>{event}</strong><br>
+                                {f'<small>Correlation: {corr_id[:12]}...</small>' if corr_id else ''}
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            if i >= 20:  # Limit timeline view to 20 items
+                                st.info(f"Showing first 20 of {len(logs)} logs. Use table view to see all.")
+                                break
+                    
+                    with view3:
+                        # Statistics
+                        st.subheader("Log Statistics")
+                        
+                        # Level distribution
+                        level_counts = {}
+                        event_counts = {}
+                        
+                        for log in logs:
+                            level = log.get("level", "unknown")
+                            level_counts[level] = level_counts.get(level, 0) + 1
+                            
+                            event = log.get("event", "unknown")
+                            event_counts[event] = event_counts.get(event, 0) + 1
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.write("**Log Levels:**")
+                            for level, count in sorted(level_counts.items(), key=lambda x: x[1], reverse=True):
+                                st.write(f"- {level}: {count}")
+                        
+                        with col2:
+                            st.write("**Top Events:**")
+                            for event, count in sorted(event_counts.items(), key=lambda x: x[1], reverse=True)[:10]:
+                                st.write(f"- {event}: {count}")
+                        
+                        # Time range
+                        if logs:
+                            timestamps = [log.get("timestamp", "") for log in logs if log.get("timestamp")]
+                            if timestamps:
+                                st.write(f"**Time Range:**")
+                                st.write(f"- First: {min(timestamps)}")
+                                st.write(f"- Last: {max(timestamps)}")
+                
+                else:
+                    st.info("No logs found matching the filters.")
+            
+            else:
+                st.error(f"Failed to fetch logs: {response.text}")
+                
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+    
+    # Auto-refresh logic
+    if auto_refresh:
+        time.sleep(5)
+        st.rerun()
+    
+    # Help section
+    with st.expander("ℹ️ How to Use System Logs"):
+        st.markdown("""
+        ### Finding Correlation IDs
+        1. When you make a request (upload, search, etc.), check the response headers
+        2. Look for `X-Correlation-ID` in the browser's developer tools
+        3. Or check the API response in the Network tab
+        
+        ### Log Levels
+        - **🔴 Error**: Critical issues that need attention
+        - **🟡 Warning**: Important notices but not critical
+        - **🔵 Info**: General information about operations
+        - **⚪ Debug**: Detailed debugging information
+        
+        ### Tips
+        - Use correlation ID to trace a complete request flow
+        - Filter by error level to quickly find issues
+        - Enable auto-refresh to monitor real-time activity
+        """)
 
 # Footer
 st.markdown("---")

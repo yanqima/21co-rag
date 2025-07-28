@@ -3,6 +3,7 @@ from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict, Any
 import uuid
+import json
 from datetime import datetime
 
 from src.processing.validation import DocumentValidator
@@ -14,6 +15,7 @@ from src.monitoring.metrics import get_metrics, active_processing_jobs
 from src.config import settings
 from src.processing.job_tracker import JobTracker
 import asyncio
+import redis
 
 logger = get_logger(__name__)
 
@@ -79,6 +81,21 @@ class JobStatus(BaseModel):
     current_file: str
     created_at: str
     documents: Dict[str, Any]
+
+
+class LogEntry(BaseModel):
+    timestamp: str
+    level: str
+    event: str
+    correlation_id: Optional[str]
+    message: Optional[str]
+    data: Dict[str, Any]
+
+
+class LogsResponse(BaseModel):
+    logs: List[Dict[str, Any]]
+    count: int
+    filtered_by: Optional[str] = None
 
 
 @router.post("/ingest", response_model=IngestResponse)
@@ -553,3 +570,61 @@ async def process_batch_documents(
     except Exception as e:
         logger.error("batch_processing_failed", job_id=job_id, error=str(e))
         job_tracker.mark_job_failed(job_id, str(e))
+
+
+@router.get("/logs", response_model=LogsResponse)
+async def get_logs(
+    correlation_id: Optional[str] = None,
+    limit: int = 100,
+    level: Optional[str] = None
+):
+    """Get system logs from Redis."""
+    try:
+        redis_client = redis.Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            decode_responses=True
+        )
+        
+        logs = []
+        
+        if correlation_id:
+            # Get logs for specific correlation ID
+            corr_key = f"logs:correlation:{correlation_id}"
+            log_keys = redis_client.lrange(corr_key, 0, limit - 1)
+            filtered_by = f"correlation_id: {correlation_id}"
+        else:
+            # Get recent logs
+            log_keys = redis_client.lrange("logs:recent", 0, limit - 1)
+            filtered_by = None
+        
+        # Fetch log entries
+        for log_key in log_keys:
+            log_data = redis_client.get(log_key)
+            if log_data:
+                try:
+                    log_entry = json.loads(log_data)
+                    
+                    # Filter by level if specified
+                    if level and log_entry.get("level", "").lower() != level.lower():
+                        continue
+                        
+                    logs.append(log_entry)
+                except json.JSONDecodeError:
+                    logger.warning("invalid_log_entry", key=log_key)
+        
+        if level and not correlation_id:
+            filtered_by = f"level: {level}"
+        elif level and correlation_id:
+            filtered_by = f"correlation_id: {correlation_id}, level: {level}"
+        
+        return LogsResponse(
+            logs=logs,
+            count=len(logs),
+            filtered_by=filtered_by
+        )
+        
+    except Exception as e:
+        logger.error("get_logs_failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to retrieve logs")
