@@ -91,6 +91,10 @@ if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'similarity_threshold' not in st.session_state:
     st.session_state.similarity_threshold = 0.4
+if 'batch_job_id' not in st.session_state:
+    st.session_state.batch_job_id = None
+if 'batch_processing_delay' not in st.session_state:
+    st.session_state.batch_processing_delay = 1.0
 
 # Header
 st.markdown("""
@@ -162,7 +166,7 @@ with st.sidebar:
         st.info("Connect to API to see stats")
 
 # Main content area with tabs
-tab1, tab2, tab3, tab4 = st.tabs(["📤 Upload Documents", "🔍 Search & Query", "📚 Document Library", "💬 Chat Interface"])
+tab1, tab2, tab3, tab4, tab5 = st.tabs(["📤 Upload Documents", "📦 Batch Upload", "🔍 Search & Query", "📚 Document Library", "💬 Chat Interface"])
 
 # Tab 1: Upload Documents
 with tab1:
@@ -182,13 +186,13 @@ with tab1:
         st.markdown("### Chunking Options")
         chunking_strategy = st.selectbox(
             "Strategy",
-            ["fixed", "semantic", "sliding"],
+            ["sliding_window", "semantic", "sentence"],
             help="How to split the document into chunks"
         )
         
-        if chunking_strategy == "fixed":
-            chunk_size = st.number_input("Chunk Size", min_value=100, max_value=2000, value=512)
-            chunk_overlap = st.number_input("Chunk Overlap", min_value=0, max_value=500, value=50)
+        if chunking_strategy == "sliding_window":
+            chunk_size = st.number_input("Chunk Size", min_value=100, max_value=2000, value=512, key="single_chunk_size")
+            chunk_overlap = st.number_input("Chunk Overlap", min_value=0, max_value=500, value=50, key="single_chunk_overlap")
         else:
             chunk_size = None
             chunk_overlap = None
@@ -242,8 +246,179 @@ with tab1:
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
 
-# Tab 2: Search & Query
+# Tab 2: Batch Upload
 with tab2:
+    st.header("Batch Upload")
+    st.markdown("Upload multiple documents at once with progress tracking.")
+    
+    # Check if there's an ongoing job
+    if st.session_state.batch_job_id:
+        st.info(f"📊 Tracking Job: {st.session_state.batch_job_id}")
+        
+        # Poll job status
+        try:
+            response = requests.get(f"{st.session_state.api_base_url}/jobs/{st.session_state.batch_job_id}")
+            if response.status_code == 200:
+                job_data = response.json()
+                
+                # Progress metrics
+                col1, col2, col3 = st.columns(3)
+                with col1:
+                    st.metric("Total Files", job_data['total'])
+                with col2:
+                    st.metric("Completed", job_data['completed'], delta=f"+{job_data['completed']}")
+                with col3:
+                    st.metric("Failed", job_data['failed'], delta=f"-{job_data['failed']}" if job_data['failed'] > 0 else None)
+                
+                # Progress bar
+                progress = (job_data['completed'] + job_data['failed']) / job_data['total'] if job_data['total'] > 0 else 0
+                st.progress(progress)
+                
+                # Current file
+                if job_data['current_file']:
+                    st.write(f"🔄 Processing: **{job_data['current_file']}**")
+                
+                # Document status table
+                st.subheader("Document Status")
+                doc_data = []
+                for doc_id, doc_info in job_data['documents'].items():
+                    status_icon = {
+                        'completed': '✅',
+                        'failed': '❌',
+                        'processing': '🔄'
+                    }.get(doc_info['status'], '⏳')
+                    
+                    doc_data.append({
+                        'Status': status_icon,
+                        'Filename': doc_info['filename'],
+                        'Error': doc_info.get('error', '')
+                    })
+                
+                if doc_data:
+                    df = pd.DataFrame(doc_data)
+                    st.dataframe(df, use_container_width=True, hide_index=True)
+                
+                # Check if job is complete
+                if job_data['status'] == 'completed':
+                    st.success("✅ Batch processing completed!")
+                    st.balloons()
+                    if st.button("Process Another Batch"):
+                        st.session_state.batch_job_id = None
+                        st.rerun()
+                else:
+                    # Auto-refresh every 2 seconds
+                    time.sleep(2)
+                    st.rerun()
+                    
+            else:
+                st.error("Failed to fetch job status")
+                if st.button("Start New Batch"):
+                    st.session_state.batch_job_id = None
+                    st.rerun()
+                    
+        except Exception as e:
+            st.error(f"Error: {str(e)}")
+            if st.button("Start New Batch"):
+                st.session_state.batch_job_id = None
+                st.rerun()
+    
+    else:
+        # File upload interface
+        uploaded_files = st.file_uploader(
+            "Choose files",
+            type=['pdf', 'txt', 'json'],
+            accept_multiple_files=True,
+            help="Select multiple files (max 100 files)"
+        )
+        
+        if uploaded_files:
+            st.write(f"📁 Selected {len(uploaded_files)} files")
+            
+            # Show file list
+            file_data = []
+            total_size = 0
+            for file in uploaded_files:
+                file_size = file.size / 1024  # KB
+                total_size += file_size
+                file_data.append({
+                    'Filename': file.name,
+                    'Type': file.type or 'Unknown',
+                    'Size': f"{file_size:.1f} KB"
+                })
+            
+            df = pd.DataFrame(file_data)
+            st.dataframe(df, use_container_width=True, hide_index=True)
+            st.write(f"**Total size:** {total_size:.1f} KB")
+            
+            # Chunking options
+            st.subheader("Processing Options")
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                chunking_strategy = st.selectbox(
+                    "Chunking Strategy",
+                    ["sliding_window", "semantic", "sentence"],
+                    help="Strategy to split documents into chunks"
+                )
+            with col2:
+                if chunking_strategy == "sliding_window":
+                    chunk_size = st.number_input("Chunk Size", min_value=100, max_value=2000, value=512, key="batch_chunk_size")
+                    chunk_overlap = st.number_input("Chunk Overlap", min_value=0, max_value=500, value=50, key="batch_chunk_overlap")
+                else:
+                    chunk_size = None
+                    chunk_overlap = None
+            with col3:
+                processing_delay = st.slider(
+                    "Processing Delay (seconds)",
+                    min_value=0.0,
+                    max_value=5.0,
+                    value=st.session_state.batch_processing_delay,
+                    step=0.5,
+                    help="Artificial delay between documents for demo purposes"
+                )
+                st.session_state.batch_processing_delay = processing_delay
+            
+            # Upload button
+            if st.button("🚀 Upload All Files", type="primary", use_container_width=True):
+                with st.spinner("Starting batch upload..."):
+                    try:
+                        # Prepare files for upload
+                        files = []
+                        for uploaded_file in uploaded_files:
+                            files.append(
+                                ('files', (uploaded_file.name, uploaded_file.getvalue(), uploaded_file.type))
+                            )
+                        
+                        # Prepare parameters
+                        params = {
+                            "chunking_strategy": chunking_strategy,
+                            "processing_delay": processing_delay
+                        }
+                        if chunk_size:
+                            params["chunk_size"] = chunk_size
+                        if chunk_overlap:
+                            params["chunk_overlap"] = chunk_overlap
+                        
+                        # Send request
+                        response = requests.post(
+                            f"{st.session_state.api_base_url}/batch-ingest",
+                            files=files,
+                            params=params
+                        )
+                        
+                        if response.status_code == 200:
+                            result = response.json()
+                            st.session_state.batch_job_id = result['job_id']
+                            st.success(f"✅ Batch upload started! Job ID: {result['job_id']}")
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"Upload failed: {response.text}")
+                            
+                    except Exception as e:
+                        st.error(f"Error: {str(e)}")
+
+# Tab 3: Search & Query
+with tab3:
     st.header("Search & Query")
     st.markdown("Search through your documents and get AI-generated answers.")
     
@@ -325,8 +500,8 @@ with tab2:
             except Exception as e:
                 st.error(f"Error: {str(e)}")
 
-# Tab 3: Document Library
-with tab3:
+# Tab 4: Document Library
+with tab4:
     st.header("Document Library")
     st.markdown("View and manage all uploaded documents.")
     
@@ -383,8 +558,8 @@ with tab3:
     except Exception as e:
         st.error(f"Connection error: {str(e)}")
 
-# Tab 4: Chat Interface
-with tab4:
+# Tab 5: Chat Interface
+with tab5:
     st.header("Chat with your Documents")
     st.markdown("Have a conversation with your knowledge base using AI.")
     

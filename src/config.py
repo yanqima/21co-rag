@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     # Environment
     environment: str = Field(default="development", env="ENVIRONMENT")
     
+    # Batch Processing Configuration
+    max_concurrent_documents: int = Field(default=5, env="MAX_CONCURRENT_DOCUMENTS")
+    batch_processing_delay: float = Field(default=1.0, env="BATCH_PROCESSING_DELAY")
+    
     @validator("similarity_threshold")
     def validate_similarity_threshold(cls, v):
         if not 0 <= v <= 1:

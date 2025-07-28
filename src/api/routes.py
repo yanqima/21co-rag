@@ -12,6 +12,8 @@ from src.storage.vector_db import VectorStore
 from src.monitoring.logger import get_logger
 from src.monitoring.metrics import get_metrics, active_processing_jobs
 from src.config import settings
+from src.processing.job_tracker import JobTracker
+import asyncio
 
 logger = get_logger(__name__)
 
@@ -19,6 +21,7 @@ logger = get_logger(__name__)
 vector_store = VectorStore()
 embedding_generator = EmbeddingGenerator()
 document_validator = DocumentValidator()
+job_tracker = JobTracker()
 
 # Create routers
 router = APIRouter()
@@ -59,6 +62,23 @@ class HealthResponse(BaseModel):
     status: str
     timestamp: str
     version: str = "1.0.0"
+
+
+class BatchIngestResponse(BaseModel):
+    job_id: str
+    message: str
+    total_files: int
+
+
+class JobStatus(BaseModel):
+    job_id: str
+    status: str
+    total: int
+    completed: int
+    failed: int
+    current_file: str
+    created_at: str
+    documents: Dict[str, Any]
 
 
 @router.post("/ingest", response_model=IngestResponse)
@@ -374,3 +394,162 @@ async def get_metrics_endpoint():
     """Prometheus metrics endpoint."""
     metrics = get_metrics()
     return Response(content=metrics, media_type="text/plain")
+
+
+@router.post("/batch-ingest", response_model=BatchIngestResponse)
+async def batch_ingest_documents(
+    background_tasks: BackgroundTasks,
+    files: List[UploadFile] = File(...),
+    chunking_strategy: str = "sliding_window",
+    chunk_size: Optional[int] = None,
+    chunk_overlap: Optional[int] = None,
+    processing_delay: Optional[float] = None
+):
+    """Upload and process multiple documents in batch."""
+    if not files:
+        raise HTTPException(status_code=400, detail="No files provided")
+    
+    if len(files) > 100:
+        raise HTTPException(status_code=400, detail="Maximum 100 files allowed per batch")
+    
+    # Create job
+    job_id = job_tracker.create_job(len(files))
+    
+    # Read all file contents first
+    file_data = []
+    for file in files:
+        try:
+            content = await file.read()
+            file_data.append({
+                "content": content,
+                "filename": file.filename,
+                "content_type": file.content_type
+            })
+        except Exception as e:
+            logger.error("file_read_failed", filename=file.filename, error=str(e))
+            job_tracker.update_job_progress(
+                job_id=job_id,
+                current_file=file.filename,
+                document_id=str(uuid.uuid4()),
+                status="failed",
+                error=f"Failed to read file: {str(e)}"
+            )
+    
+    # Queue batch processing
+    background_tasks.add_task(
+        process_batch_documents,
+        job_id=job_id,
+        file_data=file_data,
+        chunking_strategy=chunking_strategy,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+        processing_delay=processing_delay or settings.batch_processing_delay
+    )
+    
+    logger.info(
+        "batch_ingestion_started",
+        job_id=job_id,
+        file_count=len(files)
+    )
+    
+    return BatchIngestResponse(
+        job_id=job_id,
+        message="Batch processing started",
+        total_files=len(files)
+    )
+
+
+@router.get("/jobs/{job_id}", response_model=JobStatus)
+async def get_job_status(job_id: str):
+    """Get status of a batch processing job."""
+    job_data = job_tracker.get_job(job_id)
+    
+    if not job_data:
+        raise HTTPException(status_code=404, detail="Job not found")
+    
+    return JobStatus(**job_data)
+
+
+async def process_batch_documents(
+    job_id: str,
+    file_data: List[Dict[str, Any]],
+    chunking_strategy: str,
+    chunk_size: Optional[int],
+    chunk_overlap: Optional[int],
+    processing_delay: float = 1.0
+):
+    """Process multiple documents with concurrency control."""
+    semaphore = asyncio.Semaphore(settings.max_concurrent_documents)
+    
+    async def process_one_document(file_info: Dict[str, Any]):
+        async with semaphore:
+            document_id = str(uuid.uuid4())
+            filename = file_info["filename"]
+            
+            try:
+                # Update current file
+                job_tracker.update_job_progress(
+                    job_id=job_id,
+                    current_file=filename,
+                    document_id=document_id,
+                    status="processing"
+                )
+                
+                # Validate file
+                import io
+                file_obj = io.BytesIO(file_info["content"])
+                validation_result = document_validator.validate_file(
+                    file_obj,
+                    filename
+                )
+                
+                # Process document (similar to single document processing)
+                await process_document(
+                    file_content=file_info["content"],
+                    document_id=document_id,
+                    validation_result=validation_result,
+                    chunking_strategy=chunking_strategy,
+                    chunk_size=chunk_size,
+                    chunk_overlap=chunk_overlap
+                )
+                
+                # Mark as completed
+                job_tracker.update_job_progress(
+                    job_id=job_id,
+                    current_file=filename,
+                    document_id=document_id,
+                    status="completed"
+                )
+                
+                # Add artificial delay for demo purposes
+                if processing_delay > 0:
+                    await asyncio.sleep(processing_delay)
+                
+            except Exception as e:
+                logger.error(
+                    "batch_document_processing_failed",
+                    job_id=job_id,
+                    filename=filename,
+                    error=str(e)
+                )
+                job_tracker.update_job_progress(
+                    job_id=job_id,
+                    current_file=filename,
+                    document_id=document_id,
+                    status="failed",
+                    error=str(e)
+                )
+                
+                # Add delay even for failed documents
+                if processing_delay > 0:
+                    await asyncio.sleep(processing_delay)
+    
+    # Process all documents concurrently
+    try:
+        await asyncio.gather(
+            *[process_one_document(file_info) for file_info in file_data],
+            return_exceptions=True
+        )
+    except Exception as e:
+        logger.error("batch_processing_failed", job_id=job_id, error=str(e))
+        job_tracker.mark_job_failed(job_id, str(e))

@@ -1,0 +1,31 @@
+{
+  "title": "Data Science Pipeline",
+  "description": "A comprehensive overview of the data science workflow from data collection to model deployment",
+  "stages": [
+    {
+      "stage": "Data Collection",
+      "activities": ["Identify data sources", "Set up data pipelines", "Ensure data quality"],
+      "tools": ["APIs", "Web scraping", "Databases", "Data lakes"]
+    },
+    {
+      "stage": "Data Preprocessing",
+      "activities": ["Clean missing values", "Handle outliers", "Feature engineering", "Data transformation"],
+      "tools": ["Pandas", "NumPy", "SQL", "Spark"]
+    },
+    {
+      "stage": "Exploratory Data Analysis",
+      "activities": ["Statistical analysis", "Data visualization", "Pattern identification"],
+      "tools": ["Matplotlib", "Seaborn", "Tableau", "PowerBI"]
+    },
+    {
+      "stage": "Model Development",
+      "activities": ["Algorithm selection", "Training", "Validation", "Hyperparameter tuning"],
+      "tools": ["Scikit-learn", "TensorFlow", "PyTorch", "XGBoost"]
+    },
+    {
+      "stage": "Deployment",
+      "activities": ["Model serving", "Monitoring", "A/B testing", "Continuous improvement"],
+      "tools": ["Docker", "Kubernetes", "MLflow", "Cloud platforms"]
+    }
+  ]
+}

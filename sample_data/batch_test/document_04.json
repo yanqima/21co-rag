@@ -1,0 +1,23 @@
+{
+  "title": "Blockchain Technology Overview",
+  "content": "Blockchain is a distributed ledger technology that maintains a secure and decentralized record of transactions. Originally developed for Bitcoin, blockchain has applications far beyond cryptocurrency.",
+  "key_features": [
+    "Decentralization - No single point of control",
+    "Transparency - All transactions are visible",
+    "Immutability - Records cannot be altered retroactively",
+    "Security - Cryptographic protection of data"
+  ],
+  "applications": {
+    "finance": "Cross-border payments and smart contracts",
+    "supply_chain": "Tracking products from origin to consumer",
+    "healthcare": "Secure patient record management",
+    "voting": "Transparent and tamper-proof election systems",
+    "real_estate": "Digital property titles and transactions"
+  },
+  "challenges": [
+    "Scalability limitations",
+    "Energy consumption",
+    "Regulatory uncertainty",
+    "Integration complexity"
+  ]
+}
