@@ -1,0 +1,102 @@
+services:
+  # Infrastructure Services (always available)
+  
+  # Qdrant Vector Database for local development
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: rag-qdrant-local
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    environment:
+      - QDRANT__LOG_LEVEL=INFO
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - infra
+      - full
+
+  # Redis for local development
+  redis:
+    image: redis:7-alpine
+    container_name: rag-redis-local
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    profiles:
+      - infra
+      - full
+
+  # Application Services (optional)
+  
+  # RAG API Service
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: rag-api-local
+    ports:
+      - "8000:8000"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - QDRANT_HOST=qdrant
+      - QDRANT_PORT=6333
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - ENVIRONMENT=development
+      - LOG_LEVEL=INFO
+      - QDRANT_COLLECTION=documents
+    depends_on:
+      qdrant:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src
+      - ./sample_data:/app/sample_data
+      - ./logs:/app/logs
+      - ./data:/app/data
+    restart: unless-stopped
+    profiles:
+      - apps
+      - full
+    command: ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  # Streamlit UI
+  streamlit:
+    build:
+      context: .
+      dockerfile: Dockerfile.local
+    container_name: rag-streamlit-local
+    ports:
+      - "8501:8501"
+    environment:
+      - API_URL=http://api:8000
+    depends_on:
+      - api
+    volumes:
+      - ./src:/app/src
+      - ./sample_data:/app/sample_data
+      - .:/app
+    restart: unless-stopped
+    profiles:
+      - apps
+      - full
+    command: ["streamlit", "run", "streamlit_app.py", "--server.port=8501", "--server.address=0.0.0.0"]
+
+volumes:
+  qdrant_data:
+  redis_data:

@@ -171,50 +171,70 @@ This starts all services and opens the Streamlit UI at http://localhost:8501
 - Docker and Docker Compose
 - OpenAI API key
 
-### Setup Steps
+### Option 1: Local Development (Recommended)
 
-1. **Clone the repository**
-```bash
-git clone <repository-url>
-cd 21co-rag
-```
+You can run the system in different configurations using Docker Compose profiles:
 
-2. **Create environment file**
-```bash
-echo "OPENAI_API_KEY=your-api-key-here" > .env
-```
+1. **Clone and setup**:
+   ```bash
+   git clone <repository-url>
+   cd 21co-rag
+   cp .env.example .env
+   # Edit .env with your OpenAI API key
+   ```
 
-3. **Install dependencies** (using uv)
-```bash
-uv venv
-source .venv/bin/activate
-uv pip install -r requirements.txt
-```
+2. **Choose your deployment mode**:
 
-### Running the System
+   **🏠 Infrastructure Only (Recommended for Development)**:
+   ```bash
+   ./start-local.sh infra
+   # Then run apps natively for hot-reload:
+   pip install -r requirements.txt
+   uvicorn src.api.main:app --reload --port 8000  # Terminal 1
+   streamlit run streamlit_app.py --server.port 8501  # Terminal 2
+   ```
 
-#### Option 1: Full Demo Mode (Recommended)
-```bash
-./run_demo.sh
-```
+   **🐳 Full Docker Stack**:
+   ```bash
+   ./start-local.sh full
+   # Everything runs in containers with volume mounts for development
+   ```
 
-#### Option 2: Docker Compose
-```bash
-cd docker
-docker compose up
-```
+   **⚙️ Applications Only** (if infrastructure already running):
+   ```bash
+   ./start-local.sh apps
+   ```
 
-#### Option 3: Development Mode
-```bash
-# Start dependencies
-docker compose up qdrant redis -d
+3. **Access the application**:
+   - Streamlit UI: http://localhost:8501
+   - API Documentation: http://localhost:8000/docs
+   - Qdrant Dashboard: http://localhost:6333/dashboard
 
-# Run API
-uvicorn src.api.main:app --reload
+4. **Stop services**:
+   ```bash
+   ./stop-local.sh [infra|apps|full|all]
+   ```
 
-# Run Streamlit UI
-streamlit run streamlit_app.py
-```
+### Option 2: GCP Cloud Run Deployment
+
+For production deployment using serverless GCP services:
+
+1. **Setup cloud services**:
+   - Create Qdrant Cloud cluster
+   - Create GCP Cloud Memorystore Redis instance
+   - Configure `.env.gcp` with your credentials
+
+2. **Deploy to Cloud Run**:
+   ```bash
+   # Edit PROJECT_ID in deploy-gcp.sh first
+   ./deploy-gcp.sh
+   ```
+
+3. **Services used**:
+   - **Cloud Run**: Serverless containers for API and Streamlit
+   - **Qdrant Cloud**: Managed vector database
+   - **Cloud Memorystore**: Managed Redis
+   - **No Docker Compose needed** - everything is serverless!
 
 ## 🎮 Using the System
 

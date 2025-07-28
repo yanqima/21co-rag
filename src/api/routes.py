@@ -332,7 +332,7 @@ async def query_documents(request: QueryRequest):
         
         # Generate embedding for query (needed for search)
         query_embeddings = await embedding_generator.generate_embeddings([request.query])
-        query_embedding = query_embeddings[0]  # Already a list of floats
+        query_embedding = query_embeddings[0]["embedding"]  # Extract the embedding list from the result
         
         # Prepare search parameters
         search_params = {
