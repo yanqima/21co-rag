@@ -2,6 +2,7 @@ from fastapi import Request, Response, HTTPException
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Callable, Dict, Any
+import os
 import time
 import uuid
 from datetime import datetime
@@ -88,6 +89,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.rate_limit = settings.rate_limit_per_minute
     
     async def dispatch(self, request: Request, call_next: Callable) -> Response:
+        # Skip rate limiting in test environment or if explicitly disabled
+        if os.getenv("ENVIRONMENT") == "test" or os.getenv("DISABLE_RATE_LIMIT") == "true":
+            return await call_next(request)
+            
         client_ip = request.client.host if request.client else "unknown"
         now = datetime.now()
         

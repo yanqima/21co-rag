@@ -23,7 +23,13 @@
       "Bash(pip install:*)",
       "Bash(pkill:*)",
       "Bash(true)",
-      "Bash(docker-compose:*)"
+      "Bash(docker-compose:*)",
+      "Bash(ENVIRONMENT=test pytest tests/test_api.py::TestAPIEndpoints::test_query_endpoint -xvs)",
+      "Bash(ENVIRONMENT=test pytest tests/test_api.py -xvs -k \"test_query_endpoint or test_list_documents\")",
+      "Bash(ENVIRONMENT=test pytest tests/test_api.py -v --tb=short)",
+      "Bash(ENVIRONMENT=test pytest tests/test_api.py -v)",
+      "Bash(ENVIRONMENT=test pytest tests/ -v --tb=short -x)",
+      "Bash(ENVIRONMENT=test pytest tests/ -v --tb=no)"
     ],
     "deny": []
   }
