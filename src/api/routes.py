@@ -100,6 +100,7 @@ class LogsResponse(BaseModel):
 
 @router.post("/ingest", response_model=IngestResponse)
 async def ingest_document(
+    request: Request,
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
     chunking_strategy: str = "sliding_window",
@@ -119,6 +120,9 @@ async def ingest_document(
         # Generate document ID
         document_id = str(uuid.uuid4())
         
+        # Get correlation ID from request
+        correlation_id = getattr(request.state, "correlation_id", None)
+        
         # Add background task for processing
         background_tasks.add_task(
             process_document,
@@ -127,11 +131,13 @@ async def ingest_document(
             validation_result=validation_result,
             chunking_strategy=chunking_strategy,
             chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap
+            chunk_overlap=chunk_overlap,
+            correlation_id=correlation_id
         )
         
         logger.info(
             "document_ingestion_started",
+            correlation_id=correlation_id,
             job_id=job_id,
             document_id=document_id,
             filename=file.filename
@@ -156,13 +162,21 @@ async def process_document(
     validation_result: Dict[str, Any],
     chunking_strategy: str,
     chunk_size: Optional[int],
-    chunk_overlap: Optional[int]
+    chunk_overlap: Optional[int],
+    correlation_id: Optional[str] = None
 ):
     """Process document in background."""
     active_processing_jobs.inc()
     
     try:
         # Extract text based on file type
+        logger.info(
+            "text_extraction_started",
+            correlation_id=correlation_id,
+            document_id=document_id,
+            file_type=validation_result["file_type"]
+        )
+        
         if validation_result["file_type"] == "pdf":
             text = extract_pdf_text(file_content)
         elif validation_result["file_type"] == "txt":
@@ -173,6 +187,13 @@ async def process_document(
             text = json.dumps(data, indent=2)
         else:
             raise ValueError(f"Unsupported file type: {validation_result['file_type']}")
+        
+        logger.info(
+            "text_extraction_completed",
+            correlation_id=correlation_id,
+            document_id=document_id,
+            text_length=len(text)
+        )
         
         # Validate content
         document_validator.validate_content(text, validation_result["file_type"])
@@ -185,6 +206,13 @@ async def process_document(
         )
         
         # Chunk the text
+        logger.info(
+            "chunking_started",
+            correlation_id=correlation_id,
+            document_id=document_id,
+            strategy=chunking_strategy
+        )
+        
         chunks = chunker.chunk(
             text,
             metadata={
@@ -195,7 +223,21 @@ async def process_document(
             }
         )
         
+        logger.info(
+            "chunking_completed",
+            correlation_id=correlation_id,
+            document_id=document_id,
+            chunks_count=len(chunks)
+        )
+        
         # Generate embeddings
+        logger.info(
+            "embeddings_generation_started",
+            correlation_id=correlation_id,
+            document_id=document_id,
+            chunks_count=len(chunks)
+        )
+        
         texts = [chunk["text"] for chunk in chunks]
         chunk_metadata = [chunk["metadata"] for chunk in chunks]
         
@@ -204,18 +246,40 @@ async def process_document(
             chunk_metadata
         )
         
+        logger.info(
+            "embeddings_generation_completed",
+            correlation_id=correlation_id,
+            document_id=document_id,
+            embeddings_count=len(embeddings_data)
+        )
+        
         # Store in vector database
+        logger.info(
+            "vector_storage_started",
+            correlation_id=correlation_id,
+            document_id=document_id
+        )
+        
         await vector_store.upsert_documents(embeddings_data)
         
         logger.info(
+            "vector_storage_completed",
+            correlation_id=correlation_id,
+            document_id=document_id
+        )
+        
+        logger.info(
             "document_processing_completed",
+            correlation_id=correlation_id,
             document_id=document_id,
-            chunks_count=len(chunks)
+            chunks_count=len(chunks),
+            filename=validation_result["filename"]
         )
         
     except Exception as e:
         logger.error(
             "document_processing_failed",
+            correlation_id=correlation_id,
             document_id=document_id,
             error=str(e)
         )
@@ -628,3 +692,51 @@ async def get_logs(
     except Exception as e:
         logger.error("get_logs_failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to retrieve logs")
+
+
+@router.get("/profiling")
+async def get_profiling_stats(
+    time_range: Optional[int] = 100  # Number of recent requests to analyze
+):
+    """Get performance profiling statistics from logs."""
+    try:
+        from src.monitoring.profiling import aggregate_performance_stats, identify_bottlenecks
+        
+        # Get recent logs
+        redis_client = redis.Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            decode_responses=True
+        )
+        
+        # Fetch more logs than requested to ensure we get complete requests
+        log_keys = redis_client.lrange("logs:recent", 0, time_range * 20)
+        
+        all_logs = []
+        for log_key in log_keys:
+            log_data = redis_client.get(log_key)
+            if log_data:
+                try:
+                    log_entry = json.loads(log_data)
+                    all_logs.append(log_entry)
+                except json.JSONDecodeError:
+                    continue
+        
+        # Analyze performance
+        stats = aggregate_performance_stats(all_logs)
+        
+        # Identify bottlenecks
+        bottlenecks = []
+        if stats['phase_stats']:
+            bottlenecks = identify_bottlenecks(stats['phase_stats'])
+        
+        return {
+            'stats': stats,
+            'bottlenecks': bottlenecks,
+            'timestamp': datetime.now().isoformat()
+        }
+        
+    except Exception as e:
+        logger.error("get_profiling_failed", error=str(e))
+        raise HTTPException(status_code=500, detail="Failed to get profiling stats")

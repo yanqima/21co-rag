@@ -71,7 +71,11 @@ This starts all services and opens the Streamlit UI at http://localhost:8501
 - **Advanced Controls**: Fine-tune search parameters live
 
 ### Production Features
-- **Monitoring**: Prometheus metrics, structured JSON logging
+- **Monitoring**: 
+  - Prometheus metrics (latency, throughput, error rates)
+  - Structured JSON logging with correlation IDs
+  - Redis-based log storage for UI display
+  - Real-time log viewer in Streamlit
 - **Security**: Rate limiting (100 req/min), input validation
 - **Performance**: <500ms query latency, concurrent processing
 - **Deployment**: Docker multi-stage builds, Kubernetes-ready
@@ -100,6 +104,41 @@ This starts all services and opens the Streamlit UI at http://localhost:8501
 - **Configurable Delay**: Artificial processing delay for demo purposes (0-5 seconds)
 - **Error Handling**: Individual document failures don't stop the batch
 - **Progress Polling**: Auto-refresh every 2 seconds to show live updates
+
+### System Monitoring & Observability (NEW)
+- **Correlation ID Tracking**: Every request gets a unique ID for end-to-end tracing
+- **Comprehensive Logging**: 
+  - All processing phases logged with correlation IDs
+  - Stored in Redis with 1-hour TTL
+  - Accessible via `/api/v1/logs` endpoint
+- **Log Viewer UI**: 
+  - Filter by correlation ID or log level
+  - Table, timeline, and statistics views
+  - Real-time auto-refresh option
+  - Full JSON log details
+- **Request Lifecycle Visibility**:
+  - Track documents from upload through embedding generation
+  - Monitor processing times for each phase
+  - Identify bottlenecks and errors quickly
+
+### Performance Profiling Dashboard (NEW)
+- **Real-time Performance Analytics**: 
+  - Aggregates timing data from system logs
+  - No additional overhead - uses existing log data
+  - Accessible via `/api/v1/profiling` endpoint
+- **Metrics & Visualizations**:
+  - Overall performance stats (Avg, P95, Max times)
+  - Bottleneck analysis with visual progress bars
+  - Phase-by-phase breakdown with statistics
+  - Recent request timeline
+- **Smart Recommendations**:
+  - Automatic bottleneck detection
+  - Targeted optimization suggestions
+  - Performance degradation alerts
+- **Zero-overhead Implementation**:
+  - Reuses existing correlation ID logs
+  - No additional instrumentation needed
+  - Simple aggregation from Redis
 
 ## 🏗️ Architecture
 
@@ -350,6 +389,35 @@ docker compose down -v
 - Natural conversation flow
 - Context retention
 - Source transparency
+
+#### 6. **System Monitoring Demo** (NEW)
+- **Getting a Correlation ID**:
+  - Upload any document or make a search query
+  - Check browser's Network tab → Response Headers → `X-Correlation-ID`
+  - Or use the test script: `python test_logging.py`
+- **Tracing a Request**:
+  - Go to System Logs tab
+  - Paste the correlation ID
+  - Show complete request lifecycle
+  - Demonstrate the three view modes
+- **Real-time Monitoring**:
+  - Enable auto-refresh
+  - Upload a document in another tab
+  - Watch logs appear in real-time
+
+#### 7. **Performance Profiling Demo** (NEW)
+- **Analyze System Performance**:
+  - Go to Performance Profiling tab
+  - Click "Analyze Performance"
+  - Review bottleneck analysis
+- **Key Insights to Highlight**:
+  - Embedding generation takes 70-90% of time
+  - Visual progress bars show time distribution
+  - P95 vs average times reveal outliers
+- **Optimization Discussion**:
+  - Review automatic recommendations
+  - Discuss caching strategies
+  - Consider local embedding models
 
 ### Key Talking Points
 

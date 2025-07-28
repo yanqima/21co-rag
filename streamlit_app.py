@@ -166,7 +166,7 @@ with st.sidebar:
         st.info("Connect to API to see stats")
 
 # Main content area with tabs
-tab1, tab2, tab3, tab4, tab5, tab6 = st.tabs(["📤 Upload Documents", "📦 Batch Upload", "🔍 Search & Query", "📚 Document Library", "💬 Chat Interface", "📊 System Logs"])
+tab1, tab2, tab3, tab4, tab5, tab6, tab7 = st.tabs(["📤 Upload Documents", "📦 Batch Upload", "🔍 Search & Query", "📚 Document Library", "💬 Chat Interface", "📊 System Logs", "⚡ Performance Profiling"])
 
 # Tab 1: Upload Documents
 with tab1:
@@ -824,6 +824,186 @@ with tab6:
         - Use correlation ID to trace a complete request flow
         - Filter by error level to quickly find issues
         - Enable auto-refresh to monitor real-time activity
+        """)
+
+# Tab 7: Performance Profiling
+with tab7:
+    st.header("Performance Profiling")
+    st.markdown("Analyze system performance and identify bottlenecks from request logs.")
+    
+    # Refresh button
+    if st.button("📊 Analyze Performance", type="primary", use_container_width=True):
+        with st.spinner("Analyzing performance data..."):
+            try:
+                response = requests.get(f"{st.session_state.api_base_url}/profiling")
+                
+                if response.status_code == 200:
+                    data = response.json()
+                    stats = data['stats']
+                    bottlenecks = data['bottlenecks']
+                    
+                    # Overall metrics
+                    st.subheader("📈 Overall Performance Metrics")
+                    col1, col2, col3, col4 = st.columns(4)
+                    
+                    with col1:
+                        st.metric(
+                            "Total Requests Analyzed",
+                            stats['total_requests']
+                        )
+                    
+                    if stats['duration_stats']:
+                        with col2:
+                            st.metric(
+                                "Avg Request Time",
+                                f"{stats['duration_stats']['avg']:.2f}s"
+                            )
+                        with col3:
+                            st.metric(
+                                "P95 Request Time",
+                                f"{stats['duration_stats']['p95']:.2f}s"
+                            )
+                        with col4:
+                            st.metric(
+                                "Max Request Time",
+                                f"{stats['duration_stats']['max']:.2f}s"
+                            )
+                    
+                    # Bottleneck Analysis
+                    if bottlenecks:
+                        st.subheader("🔍 Bottleneck Analysis")
+                        st.markdown("Operations sorted by average duration (slowest first):")
+                        
+                        # Create bottleneck visualization
+                        bottleneck_data = []
+                        for b in bottlenecks[:5]:  # Top 5 bottlenecks
+                            phase_name = b['phase'].replace('_', ' ').title()
+                            bottleneck_data.append({
+                                'Operation': phase_name,
+                                'Avg Duration (s)': f"{b['avg_duration']:.3f}",
+                                'Max Duration (s)': f"{b['max_duration']:.3f}",
+                                '% of Total': f"{b['percentage']:.1f}%"
+                            })
+                        
+                        df_bottlenecks = pd.DataFrame(bottleneck_data)
+                        st.dataframe(df_bottlenecks, use_container_width=True, hide_index=True)
+                        
+                        # Visual representation
+                        if len(bottlenecks) > 0:
+                            st.markdown("### Time Distribution")
+                            for b in bottlenecks[:5]:
+                                phase_name = b['phase'].replace('_', ' ').title()
+                                percentage = b['percentage']
+                                
+                                # Create a progress bar visualization
+                                progress_html = f"""
+                                <div style="margin-bottom: 10px;">
+                                    <div style="display: flex; justify-content: space-between; margin-bottom: 5px;">
+                                        <span>{phase_name}</span>
+                                        <span>{b['avg_duration']:.3f}s ({percentage:.1f}%)</span>
+                                    </div>
+                                    <div style="background-color: #e0e0e0; border-radius: 5px; height: 20px;">
+                                        <div style="background-color: {'#ff4444' if percentage > 50 else '#ffaa00' if percentage > 20 else '#4444ff'}; 
+                                                    width: {percentage}%; height: 100%; border-radius: 5px;">
+                                        </div>
+                                    </div>
+                                </div>
+                                """
+                                st.markdown(progress_html, unsafe_allow_html=True)
+                    
+                    # Phase Statistics
+                    if stats['phase_stats']:
+                        st.subheader("📊 Detailed Phase Statistics")
+                        
+                        phase_tabs = st.tabs(list(stats['phase_stats'].keys()))
+                        
+                        for idx, (phase, phase_stats) in enumerate(stats['phase_stats'].items()):
+                            with phase_tabs[idx]:
+                                col1, col2, col3, col4 = st.columns(4)
+                                with col1:
+                                    st.metric("Average", f"{phase_stats['avg']:.3f}s")
+                                with col2:
+                                    st.metric("Minimum", f"{phase_stats['min']:.3f}s")
+                                with col3:
+                                    st.metric("Maximum", f"{phase_stats['max']:.3f}s")
+                                with col4:
+                                    st.metric("P50 (Median)", f"{phase_stats['p50']:.3f}s")
+                    
+                    # Recent Requests Timeline
+                    if stats.get('recent_requests'):
+                        st.subheader("📅 Recent Request Timeline")
+                        st.markdown("Last 10 processed requests:")
+                        
+                        timeline_data = []
+                        for req in stats['recent_requests']:
+                            if req.get('total_duration'):
+                                timeline_data.append({
+                                    'Correlation ID': req['correlation_id'][:12] + '...',
+                                    'Total Duration': f"{req['total_duration']:.2f}s",
+                                    'Phases': len(req.get('phase_durations', {})),
+                                    'Timestamp': req.get('start_time', 'N/A')
+                                })
+                        
+                        if timeline_data:
+                            df_timeline = pd.DataFrame(timeline_data)
+                            st.dataframe(df_timeline, use_container_width=True, hide_index=True)
+                    
+                    # Recommendations
+                    st.subheader("💡 Performance Recommendations")
+                    if bottlenecks and bottlenecks[0]['phase'] == 'embeddings_generation':
+                        st.info("""
+                        **Embedding Generation is the primary bottleneck:**
+                        - Consider using a faster embedding model
+                        - Implement embedding caching for common text chunks
+                        - Increase batch size for embedding requests
+                        - Use local embedding models for better performance
+                        """)
+                    elif bottlenecks and bottlenecks[0]['phase'] == 'text_extraction':
+                        st.info("""
+                        **Text Extraction is slow:**
+                        - Consider preprocessing PDFs in advance
+                        - Use OCR optimization for scanned documents
+                        - Implement parallel PDF processing
+                        """)
+                    elif stats['duration_stats'] and stats['duration_stats']['avg'] > 10:
+                        st.warning("""
+                        **Overall processing time is high:**
+                        - Review your infrastructure resources
+                        - Consider horizontal scaling
+                        - Implement request queuing
+                        """)
+                    else:
+                        st.success("System performance looks good! No major bottlenecks detected.")
+                    
+                else:
+                    st.error(f"Failed to fetch profiling data: {response.text}")
+                    
+            except Exception as e:
+                st.error(f"Error: {str(e)}")
+    
+    # Help section
+    with st.expander("ℹ️ Understanding Performance Metrics"):
+        st.markdown("""
+        ### Metrics Explained
+        
+        **Request Time Metrics:**
+        - **Average**: Mean processing time across all requests
+        - **P95**: 95% of requests complete faster than this time
+        - **Maximum**: Longest request processing time
+        
+        **Bottleneck Analysis:**
+        - Shows which operations consume the most time
+        - Percentage indicates proportion of total request time
+        - Red bars (>50%) indicate critical bottlenecks
+        
+        **Phase Statistics:**
+        - Detailed breakdown for each processing phase
+        - P50 (median) is often more representative than average
+        
+        ### Common Bottlenecks
+        1. **Embedding Generation**: Usually the slowest operation
+        2. **Text Extraction**: Can be slow for large PDFs
+        3. **Vector Storage**: May indicate database performance issues
         """)
 
 # Footer
