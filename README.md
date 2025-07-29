@@ -27,6 +27,21 @@ docker-compose up -d
 ./deploy-gcp.sh
 ```
 
+## 🌐 **Live Deployment Status**
+
+**✅ Currently Deployed & Operational:**
+- **API Service**: https://rag-api-479524373755.europe-west1.run.app
+- **Streamlit UI**: https://rag-streamlit-479524373755.europe-west1.run.app
+- **Health Check**: ✅ API responding with `{"status": "healthy", "version": "1.0.0"}`
+- **Infrastructure**: Qdrant Cloud + Cloud Memorystore Redis + VPC connector
+- **Last Deployed**: From commit `24c0e47` (stable working version)
+
+**🚀 Deployment Features:**
+- **Auto-scaling**: 0-5 instances based on traffic
+- **Fast Startup**: Lazy initialization prevents timeout errors
+- **Session Persistence**: Redis-backed conversation memory
+- **Full Pipeline**: Document upload → embedding → search → chat working end-to-end
+
 ## 🎯 Project Overview
 
 ### What's Implemented
@@ -41,16 +56,31 @@ docker-compose up -d
 
 ### 🆕 Recent Major Improvements
 
-#### **🔧 Critical Bug Fixes & Optimizations (Latest)**
+#### **🤖 LangChain ReAct Agent (Latest)**
+- **Intelligent Query Processing**: ReAct agent that reasons about queries and chooses appropriate tools
+- **Conversational Memory**: Redis-backed session persistence across browser sessions
+- **Smart Tool Selection**: Automatically decides whether to search documents or provide direct responses
+- **Natural Interactions**: Handles greetings, help requests, and contextual queries intelligently
+- **Performance**: Direct responses ~0.08s, contextual queries ~1.5s
+
+#### **🔧 Critical Bug Fixes & Optimizations**
 - **🚀 Docker Dependencies**: Fixed protobuf version conflicts between grpcio-tools (>=6.30.0) and streamlit (<5)
 - **📦 Dependency Resolution**: Pinned compatible versions to eliminate slow build loops:
   - `langchain==0.2.16`, `langchain-openai==0.1.23`, `openai==1.40.0`
   - `grpcio==1.60.0`, `grpcio-tools==1.60.0`, `protobuf==4.25.5`
 - **☁️ Qdrant Cloud Integration**: Fixed connection issues by switching from host/port to URL/API key authentication
 - **🔄 Streamlit Cloud Deployment**: Resolved API restriction errors by moving `st.chat_input()` outside tabs
+- **⚡ Lazy Initialization**: Prevented Cloud Run startup timeouts by deferring heavy component loading
 - **🧠 Redis Memory Integration**: Successfully integrated LangChain's official `RedisChatMessageHistory` for persistent conversational memory
 - **🔐 Session Isolation**: Implemented session-based memory with proper isolation across users
 - **⚡ Performance**: Eliminated dependency resolution loops, achieving 10x faster builds
+
+#### **🧹 Repository Maintenance & Environment Setup**
+- **Clean Repository**: Removed all `__pycache__` files and obsolete documentation
+- **Enhanced .gitignore**: Comprehensive Python patterns covering cache files, build artifacts, environments, and IDE files
+- **Environment Cleanup**: Removed unused `runtime.txt` (Heroku-specific) and `chunking_guide.txt` (superseded by LangChain docs)
+- **Docker File Handling**: Proper gitignore rules for deployment Dockerfiles while ignoring temporary copies
+- **Professional Standards**: Repository now follows industry best practices for Python projects
 
 #### **🧠 LangChain Redis Memory System**
 - **✅ Official Integration**: Using `langchain-redis==0.0.4` with multi-tier fallback system
