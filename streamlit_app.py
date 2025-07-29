@@ -1,6 +1,7 @@
 import streamlit as st
 import requests
 import json
+import os
 from typing import List, Dict, Any
 import pandas as pd
 from datetime import datetime
@@ -86,7 +87,11 @@ st.markdown("""
 
 # Initialize session state
 if 'api_base_url' not in st.session_state:
-    st.session_state.api_base_url = "http://localhost:8000/api/v1"
+    # Get API configuration from environment variables
+    api_host = os.getenv('API_HOST', 'localhost')
+    api_port = os.getenv('API_PORT', '8000')
+    api_protocol = os.getenv('API_PROTOCOL', 'http')
+    st.session_state.api_base_url = f"{api_protocol}://{api_host}:{api_port}/api/v1"
 if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'similarity_threshold' not in st.session_state:

@@ -18,12 +18,25 @@ class VectorStore:
     """Qdrant vector database interface."""
     
     def __init__(self):
-        self.client = QdrantClient(
-            host=settings.qdrant_host,
-            port=settings.qdrant_port
-        )
-        self.collection_name = settings.qdrant_collection
-        self._ensure_collection()
+        try:
+            logger.info(f"Initializing Qdrant client with URL: {settings.qdrant_url}")
+            if settings.qdrant_api_key:
+                # Qdrant Cloud with API key
+                self.client = QdrantClient(
+                    url=settings.qdrant_url,
+                    api_key=settings.qdrant_api_key
+                )
+            else:
+                # Local Qdrant instance
+                self.client = QdrantClient(url=settings.qdrant_url)
+            
+            self.collection_name = settings.qdrant_collection
+            logger.info(f"Qdrant client created, ensuring collection: {self.collection_name}")
+            self._ensure_collection()
+            logger.info("VectorStore initialization completed successfully")
+        except Exception as e:
+            logger.error(f"VectorStore initialization failed: {str(e)}")
+            raise
     
     def _ensure_collection(self):
         """Ensure the collection exists with proper configuration."""
@@ -31,8 +44,42 @@ class VectorStore:
             collections = self.client.get_collections().collections
             exists = any(c.name == self.collection_name for c in collections)
             
+            if exists:
+                # Check if existing collection has correct dimension
+                try:
+                    collection_info = self.client.get_collection(self.collection_name)
+                    # Handle different possible API response structures
+                    if hasattr(collection_info.config, 'params'):
+                        existing_dimension = collection_info.config.params.vectors.size
+                    elif hasattr(collection_info.config, 'vector_size'):
+                        existing_dimension = collection_info.config.vector_size
+                    else:
+                        # If we can't determine dimension, recreate to be safe
+                        logger.warning(f"Cannot determine dimension of existing collection {self.collection_name}. Recreating.")
+                        self.client.delete_collection(self.collection_name)
+                        exists = False
+                        existing_dimension = None
+                    
+                    if existing_dimension and existing_dimension != settings.embedding_dimension:
+                        logger.warning(
+                            f"Collection {self.collection_name} has wrong dimension {existing_dimension}, "
+                            f"expected {settings.embedding_dimension}. Recreating collection."
+                        )
+                        # Delete and recreate collection
+                        self.client.delete_collection(self.collection_name)
+                        exists = False
+                    elif existing_dimension:
+                        logger.info(f"Collection {self.collection_name} exists with correct dimension {existing_dimension}")
+                except Exception as e:
+                    logger.error(f"Error checking collection dimension: {str(e)}. Recreating collection.")
+                    try:
+                        self.client.delete_collection(self.collection_name)
+                    except:
+                        pass  # Collection might not exist or be accessible
+                    exists = False
+            
             if not exists:
-                logger.info("creating_collection", collection=self.collection_name)
+                logger.info(f"Creating collection {self.collection_name} with dimension {settings.embedding_dimension}")
                 
                 self.client.create_collection(
                     collection_name=self.collection_name,

@@ -15,8 +15,8 @@ class Settings(BaseSettings):
     openai_model: str = Field(default="gpt-3.5-turbo", env="OPENAI_MODEL")
     
     # Vector Database Configuration
-    qdrant_host: str = Field(default="localhost", env="QDRANT_HOST")
-    qdrant_port: int = Field(default=6333, env="QDRANT_PORT")
+    qdrant_url: str = Field(default="http://localhost:6333", env="QDRANT_URL")
+    qdrant_api_key: Optional[str] = Field(default=None, env="QDRANT_API_KEY")
     qdrant_collection: str = Field(default="documents", env="QDRANT_COLLECTION")
     
     # Redis Configuration

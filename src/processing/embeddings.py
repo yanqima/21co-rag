@@ -90,26 +90,44 @@ class EmbeddingGenerator:
             raise
     
     async def _generate_openai_embeddings(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings using OpenAI API."""
+        """Generate embeddings using OpenAI API via direct HTTP requests."""
         try:
-            import openai
-            from openai import AsyncOpenAI
-            
-            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            import httpx
             
             embeddings = []
             
+            # Prepare headers for OpenAI API
+            headers = {
+                "Authorization": f"Bearer {settings.openai_api_key}",
+                "Content-Type": "application/json"
+            }
+            
             # Process in batches
-            for i in range(0, len(texts), self.batch_size):
-                batch = texts[i:i + self.batch_size]
-                
-                response = await client.embeddings.create(
-                    model=self.model_name,
-                    input=batch
-                )
-                
-                batch_embeddings = [item.embedding for item in response.data]
-                embeddings.extend(batch_embeddings)
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                for i in range(0, len(texts), self.batch_size):
+                    batch = texts[i:i + self.batch_size]
+                    
+                    # Prepare request data
+                    data = {
+                        "model": self.model_name,
+                        "input": batch
+                    }
+                    
+                    # Make direct HTTP request to OpenAI API
+                    response = await client.post(
+                        "https://api.openai.com/v1/embeddings",
+                        headers=headers,
+                        json=data
+                    )
+                    
+                    if response.status_code == 200:
+                        result = response.json()
+                        batch_embeddings = [item["embedding"] for item in result["data"]]
+                        embeddings.extend(batch_embeddings)
+                    else:
+                        error_msg = f"OpenAI API error: HTTP {response.status_code} - {response.text}"
+                        logger.error("openai_api_error", error=error_msg)
+                        raise Exception(error_msg)
             
             return embeddings
             

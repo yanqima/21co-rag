@@ -29,7 +29,13 @@ def get_vector_store():
     """Get vector store instance with lazy initialization."""
     global _vector_store
     if _vector_store is None:
-        _vector_store = VectorStore()
+        try:
+            logger.info("Initializing VectorStore...")
+            _vector_store = VectorStore()
+            logger.info("VectorStore initialized successfully")
+        except Exception as e:
+            logger.error(f"Failed to initialize VectorStore: {str(e)}")
+            raise
     return _vector_store
 
 def get_embedding_generator():
@@ -377,7 +383,7 @@ async def query_documents(request: QueryRequest):
                 query=request.query,
                 search_function=search_function,
                 search_params=search_params,
-                vector_store=vector_store
+                vector_store=get_vector_store()
             )
             
             processing_time = time.time() - start_time
@@ -770,3 +776,337 @@ async def get_profiling_stats(
     except Exception as e:
         logger.error("get_profiling_failed", error=str(e))
         raise HTTPException(status_code=500, detail="Failed to get profiling stats")
+
+
+@router.post("/admin/recreate-collection")
+async def recreate_collection():
+    """Temporary endpoint to recreate Qdrant collection with correct dimension."""
+    try:
+        vector_store = get_vector_store()
+        
+        # Delete existing collection if it exists
+        try:
+            collections = vector_store.client.get_collections().collections
+            if any(c.name == vector_store.collection_name for c in collections):
+                logger.info(f"Deleting existing collection {vector_store.collection_name}")
+                vector_store.client.delete_collection(vector_store.collection_name)
+        except Exception as e:
+            logger.warning(f"Error deleting collection: {str(e)}")
+        
+        # Recreate collection with correct dimension
+        from qdrant_client.models import VectorParams, Distance
+        logger.info(f"Creating collection {vector_store.collection_name} with dimension {settings.embedding_dimension}")
+        
+        vector_store.client.create_collection(
+            collection_name=vector_store.collection_name,
+            vectors_config=VectorParams(
+                size=settings.embedding_dimension,
+                distance=Distance.COSINE
+            )
+        )
+        
+        # Create payload indices for filtering
+        vector_store.client.create_payload_index(
+            collection_name=vector_store.collection_name,
+            field_name="document_id",
+            field_schema="keyword"
+        )
+        
+        vector_store.client.create_payload_index(
+            collection_name=vector_store.collection_name,
+            field_name="document_type",
+            field_schema="keyword"
+        )
+        
+        return {
+            "message": f"Collection {vector_store.collection_name} recreated successfully",
+            "dimension": settings.embedding_dimension
+        }
+        
+    except Exception as e:
+        logger.error(f"Failed to recreate collection: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Failed to recreate collection: {str(e)}")
+
+
+@router.get("/admin/test-redis")
+async def test_redis_connection():
+    """Test Redis connection and basic operations."""
+    try:
+        import redis
+        redis_client = redis.Redis(
+            host=settings.redis_host,
+            port=settings.redis_port,
+            db=settings.redis_db,
+            decode_responses=True
+        )
+        
+        # Test basic operations
+        test_key = "test:connection"
+        test_value = "test_value"
+        
+        # Set a value
+        redis_client.set(test_key, test_value, ex=60)
+        
+        # Get the value
+        retrieved_value = redis_client.get(test_key)
+        
+        # Clean up
+        redis_client.delete(test_key)
+        
+        return {
+            "status": "success",
+            "redis_host": settings.redis_host,
+            "redis_port": settings.redis_port,
+            "redis_db": settings.redis_db,
+            "test_result": retrieved_value == test_value
+        }
+        
+    except Exception as e:
+        logger.error(f"Redis connection test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "redis_host": settings.redis_host,
+            "redis_port": settings.redis_port,
+            "redis_db": settings.redis_db
+        }
+
+
+@router.post("/admin/test-embedding")
+async def test_embedding_generation():
+    """Test embedding generation with a simple text."""
+    try:
+        embedding_generator = get_embedding_generator()
+        
+        # First, let's check the configuration
+        config_info = {
+            "model_name": embedding_generator.model_name,
+            "batch_size": embedding_generator.batch_size,
+            "openai_api_key_set": bool(settings.openai_api_key),
+            "embedding_dimension": settings.embedding_dimension
+        }
+        
+        test_text = "This is a test document for embedding generation."
+        
+        try:
+            # Generate embedding
+            embeddings = await embedding_generator.generate_embeddings([test_text])
+            
+            if embeddings and len(embeddings) > 0:
+                embedding = embeddings[0]
+                return {
+                    "status": "success",
+                    "text": test_text,
+                    "embedding_dimension": len(embedding["embedding"]),
+                    "expected_dimension": settings.embedding_dimension,
+                    "dimension_match": len(embedding["embedding"]) == settings.embedding_dimension,
+                    "config": config_info
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": "No embeddings generated",
+                    "config": config_info
+                }
+        except Exception as embedding_error:
+            return {
+                "status": "error",
+                "error": f"Embedding generation failed: {str(embedding_error)}",
+                "config": config_info,
+                "error_type": type(embedding_error).__name__
+            }
+        
+    except Exception as e:
+        logger.error(f"Embedding generation test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__
+        }
+
+
+@router.post("/admin/test-openai-direct")
+async def test_openai_direct():
+    """Test OpenAI API directly to isolate the issue."""
+    try:
+        import openai
+        from openai import AsyncOpenAI
+        
+        # Try different client initialization approaches
+        try:
+            # Method 1: Simple initialization
+            client = AsyncOpenAI(api_key=settings.openai_api_key)
+            init_method = "simple"
+        except Exception as init_error:
+            try:
+                # Method 2: Clear any global config first
+                openai.api_key = None
+                client = AsyncOpenAI(api_key=settings.openai_api_key)
+                init_method = "cleared_global"
+            except Exception as init_error2:
+                return {
+                    "status": "error",
+                    "error": f"Client initialization failed: {str(init_error)} | {str(init_error2)}",
+                    "error_type": "InitializationError",
+                    "model_attempted": settings.embedding_model
+                }
+        
+        test_text = "This is a test document for embedding generation."
+        
+        # Test the direct OpenAI API call
+        response = await client.embeddings.create(
+            model=settings.embedding_model,
+            input=[test_text]
+        )
+        
+        embedding = response.data[0].embedding
+        
+        return {
+            "status": "success",
+            "model_used": settings.embedding_model,
+            "embedding_dimension": len(embedding),
+            "expected_dimension": settings.embedding_dimension,
+            "dimension_match": len(embedding) == settings.embedding_dimension,
+            "text": test_text,
+            "init_method": init_method
+        }
+        
+    except Exception as e:
+        logger.error(f"Direct OpenAI API test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "model_attempted": settings.embedding_model
+        }
+
+
+@router.post("/admin/test-openai-isolated")
+async def test_openai_isolated():
+    """Test OpenAI API in complete isolation from other imports."""
+    try:
+        # Import in a completely fresh way
+        import sys
+        import importlib
+        
+        # Remove any cached openai modules
+        modules_to_remove = [k for k in sys.modules.keys() if k.startswith('openai')]
+        for module in modules_to_remove:
+            if module in sys.modules:
+                del sys.modules[module]
+        
+        # Fresh import
+        openai_module = importlib.import_module('openai')
+        OpenAI = getattr(openai_module, 'OpenAI')  # Use synchronous client
+        
+        # Create synchronous client with explicit args only
+        try:
+            # Method 1: Only api_key
+            client = OpenAI(api_key=settings.openai_api_key)
+            init_method = "api_key_only"
+        except Exception as e1:
+            try:
+                # Method 2: Use **kwargs to filter
+                kwargs = {"api_key": settings.openai_api_key}
+                client = OpenAI(**kwargs)
+                init_method = "kwargs_filtered"
+            except Exception as e2:
+                return {
+                    "status": "error",
+                    "error": f"All client init methods failed: {str(e1)} | {str(e2)}",
+                    "error_type": "ClientInitError",
+                    "model_attempted": settings.embedding_model,
+                    "method": "isolated_import"
+                }
+        
+        test_text = "This is a test document for embedding generation."
+        
+        # Test the API call (synchronous)
+        response = client.embeddings.create(
+            model=settings.embedding_model,
+            input=[test_text]
+        )
+        
+        embedding = response.data[0].embedding
+        
+        return {
+            "status": "success",
+            "model_used": settings.embedding_model,
+            "embedding_dimension": len(embedding),
+            "expected_dimension": settings.embedding_dimension,
+            "dimension_match": len(embedding) == settings.embedding_dimension,
+            "text": test_text,
+            "method": "isolated_import",
+            "init_method": init_method
+        }
+        
+    except Exception as e:
+        logger.error(f"Isolated OpenAI API test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "model_attempted": settings.embedding_model,
+            "method": "isolated_import"
+        }
+
+
+@router.post("/admin/test-openai-http")
+async def test_openai_http():
+    """Test OpenAI API using direct HTTP requests to bypass client library issues."""
+    try:
+        import httpx
+        import json
+        
+        test_text = "This is a test document for embedding generation."
+        
+        # Direct HTTP call to OpenAI API
+        headers = {
+            "Authorization": f"Bearer {settings.openai_api_key}",
+            "Content-Type": "application/json"
+        }
+        
+        data = {
+            "model": settings.embedding_model,
+            "input": [test_text]
+        }
+        
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/embeddings",
+                headers=headers,
+                json=data,
+                timeout=30.0
+            )
+            
+            if response.status_code == 200:
+                result = response.json()
+                embedding = result["data"][0]["embedding"]
+                
+                return {
+                    "status": "success",
+                    "model_used": settings.embedding_model,
+                    "embedding_dimension": len(embedding),
+                    "expected_dimension": settings.embedding_dimension,
+                    "dimension_match": len(embedding) == settings.embedding_dimension,
+                    "text": test_text,
+                    "method": "direct_http"
+                }
+            else:
+                return {
+                    "status": "error",
+                    "error": f"HTTP {response.status_code}: {response.text}",
+                    "error_type": "HTTPError",
+                    "model_attempted": settings.embedding_model,
+                    "method": "direct_http"
+                }
+        
+    except Exception as e:
+        logger.error(f"Direct HTTP OpenAI API test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "model_attempted": settings.embedding_model,
+            "method": "direct_http"
+        }
