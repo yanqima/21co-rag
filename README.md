@@ -361,27 +361,6 @@ openai==1.40.0
 prometheus-client==0.19.0
 ```
 
-**❌ Removed Dependencies** (for faster builds):
-```
-# Heavy ML dependencies
-# sentence-transformers==2.2.2  # Replaced with OpenAI embeddings
-
-# Development tools
-# pytest==7.4.3
-# black==23.12.1
-# mypy==1.7.1
-
-# Unused features
-# opentelemetry-*  # Not implemented
-# celery==5.3.4   # No async queue needed
-# tiktoken==0.5.2 # Not used in current implementation
-```
-
-**📊 Impact**:
-- **Build time**: 30+ minutes → ~5 minutes
-- **Image size**: ~2GB → ~800MB
-- **Dependencies**: 50+ → ~25 core packages
-- **Attack surface**: Reduced significantly
 
 ## 🎮 Using the System
 
@@ -708,55 +687,6 @@ pip install -r requirements.txt  # Production only
 4. Fine-tuning support
 5. A/B testing framework
 
-## 🧹 Production Cleanup & Optimization
-
-### Files Removed for Production
-
-The codebase has been cleaned up for production deployment by removing:
-
-**🗑️ Test Files & Development Scripts**:
-- `test_*.py` - All standalone test scripts
-- `debug_react_agent.py` - Development debugging script
-- `demo_profiling.py` - Performance profiling demo
-- `streamlit_app_simple.py` - Simplified UI version
-- `test_document.txt` - Test data file
-
-**📦 Build Artifacts**:
-- `__pycache__/` directories - Python bytecode cache
-- `.pytest_cache/` - Pytest cache directory
-- `htmlcov/` - Coverage report HTML
-- `.coverage` - Coverage data file
-- `*.log` - Application log files
-
-**🐳 Unused Docker Files**:
-- `Dockerfile.local` - Local development variant
-- `Dockerfile.streamlit.minimal` - Minimal Streamlit build
-- `requirements.streamlit.txt` - Separate Streamlit requirements
-
-### Optimized Requirements
-
-**📋 Cleaned `requirements.txt`**:
-- ✅ Removed all commented dependencies
-- ✅ Eliminated unused packages (tiktoken, sentence-transformers, etc.)
-- ✅ Consolidated related dependencies under clear sections
-- ✅ Pinned exact versions for reproducible builds
-- ✅ Reduced from 60+ lines to 30 essential dependencies
-
-**🚀 Benefits**:
-- **Faster Builds**: 10x improvement in Docker build times
-- **Smaller Images**: Reduced container size by ~2GB
-- **Cleaner Codebase**: Production-ready without development clutter
-- **Better Security**: Fewer dependencies = smaller attack surface
-- **Easier Maintenance**: Clear dependency purpose and organization
-
-### Production-Ready State
-
-✅ **Ready for Cloud Deployment**:
-- Clean, optimized codebase
-- Minimal production dependencies
-- No test files or development artifacts
-- Streamlined Docker builds
-- Clear documentation of all recent fixes
 
 ## 📚 Additional Resources
 
