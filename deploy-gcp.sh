@@ -59,3 +59,4 @@ echo "   1. Set up Qdrant Cloud and update QDRANT_URL and QDRANT_API_KEY in .env
 echo "   2. Create Cloud Memorystore Redis instance and update REDIS_HOST in .env.gcp"
 echo "   3. Update PROJECT_ID in this script"
 echo "   4. Set your OpenAI API key in .env.gcp"
+cp Dockerfile.cloudrun Dockerfile
