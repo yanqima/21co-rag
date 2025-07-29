@@ -88,10 +88,18 @@ st.markdown("""
 # Initialize session state
 if 'api_base_url' not in st.session_state:
     # Get API configuration from environment variables
-    api_host = os.getenv('API_HOST', 'localhost')
-    api_port = os.getenv('API_PORT', '8000')
-    api_protocol = os.getenv('API_PROTOCOL', 'http')
-    st.session_state.api_base_url = f"{api_protocol}://{api_host}:{api_port}/api/v1"
+    # Check for API_URL first (for Cloud Run deployment), then fall back to individual components
+    api_url = os.getenv('API_URL')
+    if api_url:
+        # Remove trailing slash if present
+        api_url = api_url.rstrip('/')
+        st.session_state.api_base_url = f"{api_url}/api/v1"
+    else:
+        # Fall back to individual components for local development
+        api_host = os.getenv('API_HOST', 'localhost')
+        api_port = os.getenv('API_PORT', '8000')
+        api_protocol = os.getenv('API_PROTOCOL', 'http')
+        st.session_state.api_base_url = f"{api_protocol}://{api_host}:{api_port}/api/v1"
 if 'messages' not in st.session_state:
     st.session_state.messages = []
 if 'similarity_threshold' not in st.session_state:
@@ -100,6 +108,9 @@ if 'batch_job_id' not in st.session_state:
     st.session_state.batch_job_id = None
 if 'batch_processing_delay' not in st.session_state:
     st.session_state.batch_processing_delay = 1.0
+if 'session_id' not in st.session_state:
+    import uuid
+    st.session_state.session_id = str(uuid.uuid4())
 
 # Header
 st.markdown("""
@@ -610,7 +621,8 @@ with tab5:
                         "generate_answer": True,
                         "limit": 5,
                         "search_type": "hybrid",
-                        "similarity_threshold": st.session_state.similarity_threshold
+                        "similarity_threshold": st.session_state.similarity_threshold,
+                        "session_id": st.session_state.session_id
                     }
                     
                     response = requests.post(

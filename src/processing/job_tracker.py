@@ -13,16 +13,30 @@ logger = get_logger(__name__)
 
 
 class JobTracker:
-    """Track batch processing jobs in Redis."""
+    """Track batch processing jobs in Redis with in-memory fallback."""
     
     def __init__(self):
-        self.redis_client = redis.Redis(
-            host=settings.redis_host,
-            port=settings.redis_port,
-            db=settings.redis_db,
-            decode_responses=True
-        )
+        self.redis_available = False
+        self.redis_client = None
+        self.memory_store = {}  # In-memory fallback
         self.job_ttl = 86400  # 24 hours
+        
+        try:
+            self.redis_client = redis.Redis(
+                host=settings.redis_host,
+                port=settings.redis_port,
+                db=settings.redis_db,
+                decode_responses=True,
+                socket_connect_timeout=2,
+                socket_timeout=2
+            )
+            # Test connection
+            self.redis_client.ping()
+            self.redis_available = True
+            logger.info("job_tracker_redis_connected")
+        except Exception as e:
+            logger.warning(f"Redis not available, using in-memory fallback: {str(e)}")
+            self.redis_available = False
     
     def create_job(self, total_documents: int) -> str:
         """Create a new job and return job_id."""
@@ -38,20 +52,38 @@ class JobTracker:
             "documents": {}
         }
         
-        self.redis_client.setex(
-            f"job:{job_id}",
-            self.job_ttl,
-            json.dumps(job_data)
-        )
+        if self.redis_available:
+            try:
+                self.redis_client.setex(
+                    f"job:{job_id}",
+                    self.job_ttl,
+                    json.dumps(job_data)
+                )
+            except Exception as e:
+                logger.warning(f"Redis write failed, using memory fallback: {str(e)}")
+                self.memory_store[f"job:{job_id}"] = job_data
+        else:
+            self.memory_store[f"job:{job_id}"] = job_data
         
         logger.info("job_created", job_id=job_id, total=total_documents)
         return job_id
     
     def get_job(self, job_id: str) -> Optional[Dict[str, Any]]:
         """Get job data by ID."""
-        data = self.redis_client.get(f"job:{job_id}")
-        if data:
-            return json.loads(data)
+        job_key = f"job:{job_id}"
+        
+        if self.redis_available:
+            try:
+                data = self.redis_client.get(job_key)
+                if data:
+                    return json.loads(data)
+            except Exception as e:
+                logger.warning(f"Redis read failed, checking memory fallback: {str(e)}")
+        
+        # Check memory fallback
+        if job_key in self.memory_store:
+            return self.memory_store[job_key]
+        
         return None
     
     def update_job_progress(
@@ -90,12 +122,20 @@ class JobTracker:
             job_data["status"] = "completed"
             job_data["current_file"] = ""
         
-        # Save back to Redis
-        self.redis_client.setex(
-            f"job:{job_id}",
-            self.job_ttl,
-            json.dumps(job_data)
-        )
+        # Save back to storage
+        job_key = f"job:{job_id}"
+        if self.redis_available:
+            try:
+                self.redis_client.setex(
+                    job_key,
+                    self.job_ttl,
+                    json.dumps(job_data)
+                )
+            except Exception as e:
+                logger.warning(f"Redis write failed, using memory fallback: {str(e)}")
+                self.memory_store[job_key] = job_data
+        else:
+            self.memory_store[job_key] = job_data
         
         logger.info(
             "job_progress_updated",

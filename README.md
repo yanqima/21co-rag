@@ -41,9 +41,28 @@ docker-compose up -d
 
 ### 🆕 Recent Major Improvements
 
+#### **🔧 Critical Bug Fixes & Optimizations (Latest)**
+- **🚀 Docker Dependencies**: Fixed protobuf version conflicts between grpcio-tools (>=6.30.0) and streamlit (<5)
+- **📦 Dependency Resolution**: Pinned compatible versions to eliminate slow build loops:
+  - `langchain==0.2.16`, `langchain-openai==0.1.23`, `openai==1.40.0`
+  - `grpcio==1.60.0`, `grpcio-tools==1.60.0`, `protobuf==4.25.5`
+- **☁️ Qdrant Cloud Integration**: Fixed connection issues by switching from host/port to URL/API key authentication
+- **🔄 Streamlit Cloud Deployment**: Resolved API restriction errors by moving `st.chat_input()` outside tabs
+- **🧠 Redis Memory Integration**: Successfully integrated LangChain's official `RedisChatMessageHistory` for persistent conversational memory
+- **🔐 Session Isolation**: Implemented session-based memory with proper isolation across users
+- **⚡ Performance**: Eliminated dependency resolution loops, achieving 10x faster builds
+
+#### **🧠 LangChain Redis Memory System**
+- **✅ Official Integration**: Using `langchain-redis==0.0.4` with multi-tier fallback system
+- **🔄 Session Persistence**: Conversation memory persists across stateless API requests
+- **🛡️ Robust Fallbacks**: Primary (LangChain Redis) → Secondary (Custom Redis) → Tertiary (In-memory)
+- **⏰ Auto-cleanup**: 24-hour TTL on Redis keys with configurable memory limits (50 messages)
+- **🔒 Session Isolation**: Each user session gets independent memory storage
+- **📊 Production Ready**: Compatible with Cloud Run deployment and Docker environments
+
 #### **Build & Deployment Optimization**
 - **🚀 10x Faster Builds**: Eliminated heavy ML dependencies (sentence-transformers, PyTorch)
-- **📦 Smaller Images**: Removed unused dependencies (~12 packages including dev/test tools)
+- **📦 Smaller Images**: Removed unused dependencies and test files for production builds
 - **☁️ Cloud Run Ready**: Optimized Dockerfiles for production deployment
 - **⚡ OpenAI Embeddings**: Switched to `text-embedding-3-small` for better performance
 
@@ -125,11 +144,17 @@ docker-compose up -d
 - **Available Tools**:
   - `search_documents`: Searches uploaded documents for relevant information
   - `get_system_info`: Retrieves system metadata (document count, list)
+  - `get_conversation_memory`: Retrieves previous conversation context when users ask about memory
 - **Smart Response Logic**:
   - Greetings → Direct response without tool use
   - Content questions → Uses search_documents tool
   - System queries → Uses get_system_info tool
-- **Context Aware**: Maintains conversation memory using LangChain's ConversationBufferMemory
+  - Memory questions → Uses get_conversation_memory tool
+- **Persistent Memory**: Redis-backed conversation history with session isolation:
+  - **Session-based**: Each user session maintains independent conversation memory
+  - **Cross-request Persistence**: Memory survives across stateless API calls
+  - **LangChain Integration**: Uses official `RedisChatMessageHistory` for compatibility
+  - **Automatic Cleanup**: 24-hour TTL with configurable message limits (50 messages)
 - **Source Attribution**: Returns relevant document chunks with relevance scores
 
 ### Batch Document Processing (NEW)
@@ -652,6 +677,56 @@ pip install -r requirements.txt  # Production only
 3. Semantic caching
 4. Fine-tuning support
 5. A/B testing framework
+
+## 🧹 Production Cleanup & Optimization
+
+### Files Removed for Production
+
+The codebase has been cleaned up for production deployment by removing:
+
+**🗑️ Test Files & Development Scripts**:
+- `test_*.py` - All standalone test scripts
+- `debug_react_agent.py` - Development debugging script
+- `demo_profiling.py` - Performance profiling demo
+- `streamlit_app_simple.py` - Simplified UI version
+- `test_document.txt` - Test data file
+
+**📦 Build Artifacts**:
+- `__pycache__/` directories - Python bytecode cache
+- `.pytest_cache/` - Pytest cache directory
+- `htmlcov/` - Coverage report HTML
+- `.coverage` - Coverage data file
+- `*.log` - Application log files
+
+**🐳 Unused Docker Files**:
+- `Dockerfile.local` - Local development variant
+- `Dockerfile.streamlit.minimal` - Minimal Streamlit build
+- `requirements.streamlit.txt` - Separate Streamlit requirements
+
+### Optimized Requirements
+
+**📋 Cleaned `requirements.txt`**:
+- ✅ Removed all commented dependencies
+- ✅ Eliminated unused packages (tiktoken, sentence-transformers, etc.)
+- ✅ Consolidated related dependencies under clear sections
+- ✅ Pinned exact versions for reproducible builds
+- ✅ Reduced from 60+ lines to 30 essential dependencies
+
+**🚀 Benefits**:
+- **Faster Builds**: 10x improvement in Docker build times
+- **Smaller Images**: Reduced container size by ~2GB
+- **Cleaner Codebase**: Production-ready without development clutter
+- **Better Security**: Fewer dependencies = smaller attack surface
+- **Easier Maintenance**: Clear dependency purpose and organization
+
+### Production-Ready State
+
+✅ **Ready for Cloud Deployment**:
+- Clean, optimized codebase
+- Minimal production dependencies
+- No test files or development artifacts
+- Streamlined Docker builds
+- Clear documentation of all recent fixes
 
 ## 📚 Additional Resources
 

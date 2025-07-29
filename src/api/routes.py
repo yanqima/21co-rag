@@ -77,6 +77,7 @@ class QueryRequest(BaseModel):
     search_type: str = Field(default="hybrid", pattern="^(vector|keyword|hybrid)$")
     filters: Optional[Dict[str, Any]] = None
     generate_answer: bool = Field(default=True)
+    session_id: Optional[str] = Field(default="default", description="Session ID for conversation memory")
 
 
 class QueryResponse(BaseModel):
@@ -347,7 +348,7 @@ async def query_documents(request: QueryRequest):
     
     try:
         # Define search function for the agent
-        async def search_function(query_embedding, search_type, limit, filters, similarity_threshold):
+        async def search_function(query_embedding, search_type, limit, filters, similarity_threshold, query_text=None):
             if search_type == "vector":
                 return await get_vector_store().search(
                     query_embedding=query_embedding,
@@ -356,9 +357,11 @@ async def query_documents(request: QueryRequest):
                     similarity_threshold=similarity_threshold
                 )
             else:  # hybrid
+                # Use provided query_text or fall back to request.query
+                text_query = query_text if query_text is not None else request.query
                 return await get_vector_store().hybrid_search(
                     query_embedding=query_embedding,
-                    query_text=request.query,
+                    query_text=text_query,
                     limit=limit,
                     filters=filters,
                     similarity_threshold=similarity_threshold
@@ -383,7 +386,9 @@ async def query_documents(request: QueryRequest):
                 query=request.query,
                 search_function=search_function,
                 search_params=search_params,
-                vector_store=get_vector_store()
+                vector_store=get_vector_store(),
+                embedding_generator=get_embedding_generator(),
+                session_id=request.session_id or "default"
             )
             
             processing_time = time.time() - start_time

@@ -9,14 +9,12 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy requirements and install dependencies
-COPY requirements.txt .
+# Copy requirements for Streamlit
+COPY requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy application code
-COPY src/ ./src/
-COPY sample_data/ ./sample_data/
+# Copy application code (Streamlit app only)
 COPY streamlit_app.py .
 
 # Create directories
@@ -31,5 +29,5 @@ USER app
 ENV PORT=8080
 EXPOSE $PORT
 
-# Streamlit command
-CMD exec streamlit run streamlit_app.py --server.port=$PORT --server.address=0.0.0.0
+# Streamlit command optimized for Cloud Run
+CMD exec streamlit run streamlit_app.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true --server.runOnSave=false --server.fileWatcherType=none
