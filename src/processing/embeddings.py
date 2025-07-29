@@ -104,7 +104,7 @@ class EmbeddingGenerator:
                 batch = texts[i:i + self.batch_size]
                 
                 response = await client.embeddings.create(
-                    model="text-embedding-ada-002",
+                    model=self.model_name,
                     input=batch
                 )
                 

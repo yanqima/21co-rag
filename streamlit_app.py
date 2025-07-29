@@ -563,17 +563,32 @@ with tab5:
     st.header("Chat with your Documents")
     st.markdown("Have a conversation with your knowledge base using AI.")
     
-    # Chat history
-    chat_container = st.container()
+    # Chat input at top for better UX
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        prompt = st.text_input("Ask a question about your documents...", key="chat_input", label_visibility="collapsed")
+    with col2:
+        send_button = st.button("Send", type="primary", use_container_width=True)
+    
+    st.markdown("---")  # Visual separator
     
     # Display chat history
-    with chat_container:
-        for message in st.session_state.messages:
+    if st.session_state.messages:
+        st.subheader("💬 Conversation History")
+        # Show only the last 10 messages to prevent overflow
+        recent_messages = st.session_state.messages[-10:] if len(st.session_state.messages) > 10 else st.session_state.messages
+        
+        for message in recent_messages:
             with st.chat_message(message["role"]):
                 st.markdown(message["content"])
+        
+        # Show message count if there are more than 10
+        if len(st.session_state.messages) > 10:
+            st.caption(f"Showing last 10 of {len(st.session_state.messages)} messages")
+    else:
+        st.info("👋 Start a conversation by asking a question about your documents!")
     
-    # Chat input
-    if prompt := st.chat_input("Ask a question about your documents..."):
+    if (prompt and send_button) or (prompt and st.session_state.get("enter_pressed", False)):
         # Add user message to chat history
         st.session_state.messages.append({"role": "user", "content": prompt})
         

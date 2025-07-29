@@ -31,10 +31,10 @@ class Settings(BaseSettings):
     
     # Embedding Configuration
     embedding_model: str = Field(
-        default="sentence-transformers/all-MiniLM-L6-v2", 
+        default="text-embedding-3-small", 
         env="EMBEDDING_MODEL"
     )
-    embedding_dimension: int = Field(default=384, env="EMBEDDING_DIMENSION")  # SentenceTransformer all-MiniLM-L6-v2 dimension
+    embedding_dimension: int = Field(default=1536, env="EMBEDDING_DIMENSION")  # OpenAI text-embedding-3-small dimension
     
     # Search Configuration
     similarity_threshold: float = Field(default=0.4, env="SIMILARITY_THRESHOLD")

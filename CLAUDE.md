@@ -23,7 +23,7 @@
 ### 4. Others
 - Use UV to install and manage python dependencies
 - Do not ask me to allow using CURL, just use it
-
+- Specify pip version directly, with ==, do not use >= or <=
 ---
 
 # RAG System Project Context
