@@ -7,7 +7,7 @@ import os
 class Settings(BaseSettings):
     # API Configuration
     api_host: str = Field(default="0.0.0.0", env="API_HOST")
-    api_port: int = Field(default=8000, env="API_PORT")
+    api_port: int = Field(default=8000, env="PORT,API_PORT")
     api_workers: int = Field(default=4, env="API_WORKERS")
     
     # OpenAI Configuration

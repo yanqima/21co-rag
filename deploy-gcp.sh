@@ -27,21 +27,22 @@ source .env.gcp
 cp Dockerfile.cloudrun Dockerfile
 gcloud run deploy $SERVICE_NAME_API \
     --source . \
+    --dockerfile Dockerfile.cloudrun \
     --platform managed \
     --region $REGION \
     --allow-unauthenticated \
-    --port 8080 \
-    --memory 2Gi \
+    --memory 1Gi \
     --cpu 1 \
     --min-instances 0 \
     --max-instances 10 \
-    --set-env-vars OPENAI_API_KEY="$OPENAI_API_KEY",OPENAI_MODEL="$OPENAI_MODEL",ENVIRONMENT="$ENVIRONMENT",QDRANT_URL="$QDRANT_URL",QDRANT_API_KEY="$QDRANT_API_KEY",QDRANT_COLLECTION="$QDRANT_COLLECTION",API_HOST="$API_HOST",API_PORT="$API_PORT",LOG_LEVEL="$LOG_LEVEL",PORT="$PORT"
+    --vpc-connector rag-connector \
+    --set-env-vars OPENAI_API_KEY="$OPENAI_API_KEY",OPENAI_MODEL="$OPENAI_MODEL",ENVIRONMENT="$ENVIRONMENT",QDRANT_URL="$QDRANT_URL",QDRANT_API_KEY="$QDRANT_API_KEY",QDRANT_COLLECTION="$QDRANT_COLLECTION",API_HOST="$API_HOST",API_PORT="$API_PORT",LOG_LEVEL="$LOG_LEVEL",REDIS_HOST="$REDIS_HOST",REDIS_PORT="$REDIS_PORT",REDIS_DB="$REDIS_DB"
 
 # Build and deploy Streamlit service
 echo "🎨 Building and deploying Streamlit service..."
 # Copy Dockerfile for Streamlit deployment
 cp Dockerfile.streamlit Dockerfile
-gcloud run deploy $SERVICE_NAME_STREAMLIT \
+gcloud run deploy rag-streamlit \
     --source . \
     --platform managed \
     --region $REGION \
@@ -51,7 +52,7 @@ gcloud run deploy $SERVICE_NAME_STREAMLIT \
     --cpu 1 \
     --min-instances 0 \
     --max-instances 5 \
-    --set-env-vars OPENAI_API_KEY="$OPENAI_API_KEY",OPENAI_MODEL="$OPENAI_MODEL",ENVIRONMENT="$ENVIRONMENT",QDRANT_URL="$QDRANT_URL",QDRANT_API_KEY="$QDRANT_API_KEY",QDRANT_COLLECTION="$QDRANT_COLLECTION",API_HOST="$API_HOST",API_PORT="$API_PORT",LOG_LEVEL="$LOG_LEVEL",PORT="$PORT"
+    --set-env-vars ENVIRONMENT="$ENVIRONMENT",API_HOST="rag-api-479524373755.europe-west1.run.app",API_PORT="443",API_PROTOCOL="https"
 
 echo "✅ Deployment complete!"
 echo "📝 Remember to:"

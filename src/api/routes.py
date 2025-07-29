@@ -19,11 +19,39 @@ import redis
 
 logger = get_logger(__name__)
 
-# Initialize components
-vector_store = VectorStore()
-embedding_generator = EmbeddingGenerator()
-document_validator = DocumentValidator()
-job_tracker = JobTracker()
+# Global component instances (lazy initialization)
+_vector_store = None
+_embedding_generator = None
+_document_validator = None
+_job_tracker = None
+
+def get_vector_store():
+    """Get vector store instance with lazy initialization."""
+    global _vector_store
+    if _vector_store is None:
+        _vector_store = VectorStore()
+    return _vector_store
+
+def get_embedding_generator():
+    """Get embedding generator instance with lazy initialization."""
+    global _embedding_generator
+    if _embedding_generator is None:
+        _embedding_generator = EmbeddingGenerator()
+    return _embedding_generator
+
+def get_document_validator():
+    """Get document validator instance with lazy initialization."""
+    global _document_validator
+    if _document_validator is None:
+        _document_validator = DocumentValidator()
+    return _document_validator
+
+def get_job_tracker():
+    """Get job tracker instance with lazy initialization."""
+    global _job_tracker
+    if _job_tracker is None:
+        _job_tracker = JobTracker()
+    return _job_tracker
 
 # Create routers
 router = APIRouter()
@@ -112,7 +140,7 @@ async def ingest_document(
     
     try:
         # Validate file
-        validation_result = document_validator.validate_file(
+        validation_result = get_document_validator().validate_file(
             file.file, 
             file.filename
         )
@@ -196,7 +224,7 @@ async def process_document(
         )
         
         # Validate content
-        document_validator.validate_content(text, validation_result["file_type"])
+        get_document_validator().validate_content(text, validation_result["file_type"])
         
         # Create chunking strategy
         chunker = ChunkingFactory.create_strategy(
@@ -241,7 +269,7 @@ async def process_document(
         texts = [chunk["text"] for chunk in chunks]
         chunk_metadata = [chunk["metadata"] for chunk in chunks]
         
-        embeddings_data = await embedding_generator.generate_embeddings(
+        embeddings_data = await get_embedding_generator().generate_embeddings(
             texts, 
             chunk_metadata
         )
@@ -260,7 +288,7 @@ async def process_document(
             document_id=document_id
         )
         
-        await vector_store.upsert_documents(embeddings_data)
+        await get_vector_store().upsert_documents(embeddings_data)
         
         logger.info(
             "vector_storage_completed",
@@ -315,14 +343,14 @@ async def query_documents(request: QueryRequest):
         # Define search function for the agent
         async def search_function(query_embedding, search_type, limit, filters, similarity_threshold):
             if search_type == "vector":
-                return await vector_store.search(
+                return await get_vector_store().search(
                     query_embedding=query_embedding,
                     limit=limit,
                     filters=filters,
                     similarity_threshold=similarity_threshold
                 )
             else:  # hybrid
-                return await vector_store.hybrid_search(
+                return await get_vector_store().hybrid_search(
                     query_embedding=query_embedding,
                     query_text=request.query,
                     limit=limit,
@@ -331,7 +359,7 @@ async def query_documents(request: QueryRequest):
                 )
         
         # Generate embedding for query (needed for search)
-        query_embeddings = await embedding_generator.generate_embeddings([request.query])
+        query_embeddings = await get_embedding_generator().generate_embeddings([request.query])
         query_embedding = query_embeddings[0]["embedding"]  # Extract the embedding list from the result
         
         # Prepare search parameters
@@ -431,7 +459,7 @@ async def list_documents(
 ):
     """List all processed documents."""
     try:
-        documents, total = await vector_store.list_documents(offset, limit)
+        documents, total = await get_vector_store().list_documents(offset, limit)
         
         return DocumentResponse(
             documents=documents,
@@ -449,7 +477,7 @@ async def list_documents(
 async def delete_document(document_id: str):
     """Delete a document and its embeddings."""
     try:
-        success = await vector_store.delete_document(document_id)
+        success = await get_vector_store().delete_document(document_id)
         
         if not success:
             raise HTTPException(status_code=404, detail="Document not found")
@@ -496,7 +524,7 @@ async def batch_ingest_documents(
         raise HTTPException(status_code=400, detail="Maximum 100 files allowed per batch")
     
     # Create job
-    job_id = job_tracker.create_job(len(files))
+    job_id = get_job_tracker().create_job(len(files))
     
     # Read all file contents first
     file_data = []
@@ -510,7 +538,7 @@ async def batch_ingest_documents(
             })
         except Exception as e:
             logger.error("file_read_failed", filename=file.filename, error=str(e))
-            job_tracker.update_job_progress(
+            get_job_tracker().update_job_progress(
                 job_id=job_id,
                 current_file=file.filename,
                 document_id=str(uuid.uuid4()),
@@ -545,7 +573,7 @@ async def batch_ingest_documents(
 @router.get("/jobs/{job_id}", response_model=JobStatus)
 async def get_job_status(job_id: str):
     """Get status of a batch processing job."""
-    job_data = job_tracker.get_job(job_id)
+    job_data = get_job_tracker().get_job(job_id)
     
     if not job_data:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -571,7 +599,7 @@ async def process_batch_documents(
             
             try:
                 # Update current file
-                job_tracker.update_job_progress(
+                get_job_tracker().update_job_progress(
                     job_id=job_id,
                     current_file=filename,
                     document_id=document_id,
@@ -581,7 +609,7 @@ async def process_batch_documents(
                 # Validate file
                 import io
                 file_obj = io.BytesIO(file_info["content"])
-                validation_result = document_validator.validate_file(
+                validation_result = get_document_validator().validate_file(
                     file_obj,
                     filename
                 )
@@ -597,7 +625,7 @@ async def process_batch_documents(
                 )
                 
                 # Mark as completed
-                job_tracker.update_job_progress(
+                get_job_tracker().update_job_progress(
                     job_id=job_id,
                     current_file=filename,
                     document_id=document_id,
@@ -615,7 +643,7 @@ async def process_batch_documents(
                     filename=filename,
                     error=str(e)
                 )
-                job_tracker.update_job_progress(
+                get_job_tracker().update_job_progress(
                     job_id=job_id,
                     current_file=filename,
                     document_id=document_id,
@@ -635,7 +663,7 @@ async def process_batch_documents(
         )
     except Exception as e:
         logger.error("batch_processing_failed", job_id=job_id, error=str(e))
-        job_tracker.mark_job_failed(job_id, str(e))
+        get_job_tracker().mark_job_failed(job_id, str(e))
 
 
 @router.get("/logs", response_model=LogsResponse)
