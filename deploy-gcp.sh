@@ -3,8 +3,8 @@
 # GCP Cloud Run Deployment Script
 # Make sure you have gcloud CLI installed and authenticated
 
-PROJECT_ID="your-gcp-project-id"
-REGION="us-central1"
+PROJECT_ID="nifty-charter-464916-f6"  # Replace with your actual project ID
+REGION="europe-west1"
 SERVICE_NAME_API="rag-api"
 SERVICE_NAME_STREAMLIT="rag-streamlit"
 
@@ -21,9 +21,12 @@ gcloud services enable redis.googleapis.com
 
 # Build and deploy API service
 echo "🔨 Building and deploying API service..."
+# Load environment variables from .env.gcp
+source .env.gcp
+# Copy Dockerfile for Cloud Run deployment
+cp Dockerfile.cloudrun Dockerfile
 gcloud run deploy $SERVICE_NAME_API \
     --source . \
-    --dockerfile Dockerfile.cloudrun \
     --platform managed \
     --region $REGION \
     --allow-unauthenticated \
@@ -32,13 +35,14 @@ gcloud run deploy $SERVICE_NAME_API \
     --cpu 1 \
     --min-instances 0 \
     --max-instances 10 \
-    --env-vars-file .env.gcp
+    --set-env-vars OPENAI_API_KEY="$OPENAI_API_KEY",OPENAI_MODEL="$OPENAI_MODEL",ENVIRONMENT="$ENVIRONMENT",QDRANT_URL="$QDRANT_URL",QDRANT_API_KEY="$QDRANT_API_KEY",QDRANT_COLLECTION="$QDRANT_COLLECTION",API_HOST="$API_HOST",API_PORT="$API_PORT",LOG_LEVEL="$LOG_LEVEL",PORT="$PORT"
 
 # Build and deploy Streamlit service
 echo "🎨 Building and deploying Streamlit service..."
+# Copy Dockerfile for Streamlit deployment
+cp Dockerfile.streamlit Dockerfile
 gcloud run deploy $SERVICE_NAME_STREAMLIT \
     --source . \
-    --dockerfile Dockerfile.cloudrun \
     --platform managed \
     --region $REGION \
     --allow-unauthenticated \
@@ -47,8 +51,7 @@ gcloud run deploy $SERVICE_NAME_STREAMLIT \
     --cpu 1 \
     --min-instances 0 \
     --max-instances 5 \
-    --env-vars-file .env.gcp \
-    --command "streamlit,run,streamlit_app.py,--server.port=8080,--server.address=0.0.0.0"
+    --set-env-vars OPENAI_API_KEY="$OPENAI_API_KEY",OPENAI_MODEL="$OPENAI_MODEL",ENVIRONMENT="$ENVIRONMENT",QDRANT_URL="$QDRANT_URL",QDRANT_API_KEY="$QDRANT_API_KEY",QDRANT_COLLECTION="$QDRANT_COLLECTION",API_HOST="$API_HOST",API_PORT="$API_PORT",LOG_LEVEL="$LOG_LEVEL",PORT="$PORT"
 
 echo "✅ Deployment complete!"
 echo "📝 Remember to:"

@@ -15,7 +15,7 @@ langchain-experimental>=0.0.50
 langchain-openai>=0.0.5
 
 # Vector storage and embeddings
-qdrant-client==1.7.0
+qdrant-client==1.7.1
 sentence-transformers==2.2.2
 openai==1.6.1
 
