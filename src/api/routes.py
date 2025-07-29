@@ -435,23 +435,36 @@ Question: {query}
 
 Answer:"""
         
-        # Generate answer using OpenAI
-        import openai
-        from openai import AsyncOpenAI
+        # Generate answer using direct HTTP call to OpenAI API
+        import httpx
+        import json
         
-        client = AsyncOpenAI(api_key=settings.openai_api_key)
+        headers = {
+            "Authorization": f"Bearer {settings.openai_api_key}",
+            "Content-Type": "application/json"
+        }
         
-        response = await client.chat.completions.create(
-            model=settings.openai_model,
-            messages=[
+        payload = {
+            "model": settings.openai_model,
+            "messages": [
                 {"role": "system", "content": "You are a helpful assistant that answers questions based on the provided context."},
                 {"role": "user", "content": prompt}
             ],
-            temperature=0.7,
-            max_tokens=500
-        )
+            "temperature": 0.7,
+            "max_tokens": 500
+        }
         
-        return response.choices[0].message.content
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers=headers,
+                json=payload,
+                timeout=30.0
+            )
+            response.raise_for_status()
+            result = response.json()
+            
+        return result["choices"][0]["message"]["content"]
         
     except Exception as e:
         logger.error("answer_generation_failed", error=str(e))
@@ -1109,4 +1122,95 @@ async def test_openai_http():
             "error_type": type(e).__name__,
             "model_attempted": settings.embedding_model,
             "method": "direct_http"
+        }
+
+
+@router.post("/admin/test-react-agent")
+async def test_react_agent():
+    """Test ReAct agent initialization and basic functionality."""
+    try:
+        from src.processing.react_agent import process_query_with_agent
+        
+        # Simple test query
+        test_query = "Hello, can you help me?"
+        
+        # Mock search function for testing
+        async def mock_search_function(query_embedding, search_type, limit, filters, similarity_threshold):
+            return [{
+                "id": "test-id",
+                "score": 0.9,
+                "text": "This is a test document for the RAG system.",
+                "metadata": {
+                    "document_id": "test-doc-id",
+                    "filename": "test.txt",
+                    "chunk_id": 0
+                }
+            }]
+        
+        # Mock search params
+        search_params = {
+            "query_embedding": [0.1] * 1536,  # Mock embedding
+            "search_type": "hybrid",
+            "limit": 5,
+            "filters": None,
+            "similarity_threshold": 0.7
+        }
+        
+        # Test the agent
+        result = await process_query_with_agent(
+            query=test_query,
+            search_function=mock_search_function,
+            search_params=search_params,
+            vector_store=get_vector_store()
+        )
+        
+        return {
+            "status": "success",
+            "query": test_query,
+            "agent_response": result,
+            "method": "react_agent_test"
+        }
+        
+    except Exception as e:
+        logger.error(f"ReAct agent test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "method": "react_agent_test"
+        }
+
+
+@router.post("/admin/test-llm-direct")
+async def test_llm_direct():
+    """Test LLM initialization and direct call."""
+    try:
+        from langchain_openai import ChatOpenAI
+        from langchain.schema import HumanMessage
+        
+        # Test LangChain ChatOpenAI initialization
+        llm = ChatOpenAI(
+            model=settings.openai_model,
+            temperature=0.7,
+            api_key=settings.openai_api_key
+        )
+        
+        # Test a simple call
+        test_message = HumanMessage(content="Hello, this is a test. Please respond with 'Test successful'.")
+        response = await llm.agenerate([[test_message]])
+        
+        return {
+            "status": "success",
+            "model_used": settings.openai_model,
+            "response": response.generations[0][0].text,
+            "method": "langchain_llm_test"
+        }
+        
+    except Exception as e:
+        logger.error(f"LangChain LLM test failed: {str(e)}")
+        return {
+            "status": "error",
+            "error": str(e),
+            "error_type": type(e).__name__,
+            "method": "langchain_llm_test"
         }

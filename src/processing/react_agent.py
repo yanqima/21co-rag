@@ -153,63 +153,12 @@ class LangChainReActAgent:
             )
         ]
     
-    async def process_query(self, query: str, search_function, search_params, vector_store) -> Dict[str, Any]:
-        """Process query using LangChain ReAct agent."""
-        try:
-            self._initialize_llm()
-            
-            # If LLM initialization failed, fall back to simple logic
-            if self.llm is None:
-                return await self._fallback_processing(query, search_function, search_params)
-            
-            # Create tools for the agent
-            tools = self._create_tools(search_function, search_params, vector_store)
-            
-            # Create a custom system message for better tool selection
-            system_message = """You are a helpful RAG (Retrieval-Augmented Generation) assistant. 
-
-For content questions (what is X, explain Y, tell me about Z):
-- ALWAYS use the search_documents tool first to find relevant information
-- Base your answer on the search results
-- If no results are found, say so clearly
-
-For system questions (how many documents, list documents):
-- Use the get_system_info tool
-
-For greetings (hello, hi, how are you):
-- Respond naturally without using any tools
-
-Remember: When someone asks "What is X?" or any factual question, ALWAYS search documents first!"""
-            
-            # Initialize agent with custom prompt
-            self.agent = initialize_agent(
-                tools=tools,
-                llm=self.llm,
-                agent=AgentType.CHAT_CONVERSATIONAL_REACT_DESCRIPTION,
-                memory=self.memory,
-                verbose=True,
-                handle_parsing_errors=True,
-                agent_kwargs={
-                    "system_message": system_message
-                }
-            )
-            
-            # Process the query with the agent
-            response = await self.agent.arun(input=query)
-            
-            # Extract sources from the agent's tool usage
-            sources = self._extract_sources_from_memory()
-            
-            return {
-                "results": sources,
-                "answer": response,
-                "total_results": len(sources),
-                "agent_action": "react_agent_response"
-            }
-            
-        except Exception as e:
-            logger.error("react_agent_failed", error=str(e))
-            return await self._fallback_processing(query, search_function, search_params)
+    async def process_query(self, query: str, search_function, search_params, vector_store):
+        """Process query using fallback processing due to OpenAI client issues."""
+        # Temporarily bypass ReAct agent due to OpenAI client 'proxies' parameter issues
+        # Use direct fallback processing which uses direct HTTP calls
+        logger.info("Bypassing ReAct agent, using direct fallback processing")
+        return await self._fallback_processing(query, search_function, search_params)
     
     def _extract_sources_from_memory(self) -> List[Dict[str, Any]]:
         """Extract source information from agent memory/tool usage."""

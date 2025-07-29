@@ -27,7 +27,6 @@ source .env.gcp
 cp Dockerfile.cloudrun Dockerfile
 gcloud run deploy $SERVICE_NAME_API \
     --source . \
-    --dockerfile Dockerfile.cloudrun \
     --platform managed \
     --region $REGION \
     --allow-unauthenticated \
