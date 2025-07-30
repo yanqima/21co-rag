@@ -32,28 +32,34 @@ class TestAPIEndpoints:
     @pytest.fixture
     def mock_vector_store(self):
         """Mock vector store."""
-        with patch('src.api.routes.vector_store') as mock:
-            mock.search = AsyncMock(return_value=[])
-            mock.hybrid_search = AsyncMock(return_value=[])
-            mock.upsert_documents = AsyncMock(return_value={"success": True, "count": 1})
-            mock.delete_document = AsyncMock(return_value=True)
-            mock.list_documents = AsyncMock(return_value=([], 0))  # Return tuple
+        mock = Mock()
+        mock.search = AsyncMock(return_value=[])
+        mock.hybrid_search = AsyncMock(return_value=[])
+        mock.upsert_documents = AsyncMock(return_value={"success": True, "count": 1})
+        mock.delete_document = AsyncMock(return_value=True)
+        mock.list_documents = AsyncMock(return_value=([], 0))  # Return tuple
+        
+        with patch('src.api.routes.get_vector_store', return_value=mock):
             yield mock
     
     @pytest.fixture
     def mock_embedding_generator(self):
         """Mock embedding generator."""
-        with patch('src.api.routes.embedding_generator') as mock:
-            mock.generate_embeddings = AsyncMock(return_value=[[0.1] * 1536])
+        mock = Mock()
+        mock.generate_embeddings = AsyncMock(return_value=[{"embedding": [0.1] * 1536, "metadata": {}}])
+        
+        with patch('src.api.routes.get_embedding_generator', return_value=mock):
             yield mock
     
     @pytest.fixture
     def mock_job_tracker(self):
         """Mock job tracker."""
-        with patch('src.api.routes.job_tracker') as mock:
-            mock.create_job = Mock(return_value="job-123")
-            mock.update_status = Mock()
-            mock.get_job = Mock(return_value={"status": "processing"})
+        mock = Mock()
+        mock.create_job = Mock(return_value="job-123")
+        mock.update_status = Mock()
+        mock.get_job = Mock(return_value={"status": "processing"})
+        
+        with patch('src.api.routes.get_job_tracker', return_value=mock):
             yield mock
     
     def test_health_check(self, client):
@@ -87,13 +93,20 @@ class TestAPIEndpoints:
             }
         ]
         
-        with patch('openai.AsyncOpenAI') as mock_openai_class:
-            mock_client = Mock()
-            mock_openai_class.return_value = mock_client
-            mock_client.chat.completions.create = AsyncMock()
-            mock_response = Mock()
-            mock_response.choices = [Mock(message=Mock(content="Generated answer"))]
-            mock_client.chat.completions.create.return_value = mock_response
+        # Mock the react agent
+        with patch('src.processing.react_agent.process_query_with_agent') as mock_agent:
+            mock_agent.return_value = {
+                "results": [
+                    {
+                        "text": "Test result",
+                        "score": 0.95,
+                        "document_id": "doc-123",
+                        "metadata": {"source": "test.txt"}
+                    }
+                ],
+                "answer": "Generated answer",
+                "total_results": 1
+            }
             
             response = client.post(
                 "/api/v1/query",
@@ -116,10 +129,17 @@ class TestAPIEndpoints:
         """Test query with no results."""
         mock_vector_store.hybrid_search.return_value = []
         
-        response = client.post(
-            "/api/v1/query",
-            json={"query": "test query"}
-        )
+        with patch('src.processing.react_agent.process_query_with_agent') as mock_agent:
+            mock_agent.return_value = {
+                "results": [],
+                "answer": "No relevant documents found.",
+                "total_results": 0
+            }
+            
+            response = client.post(
+                "/api/v1/query",
+                json={"query": "test query"}
+            )
         
         assert response.status_code == 200
         data = response.json()
@@ -285,23 +305,32 @@ class TestAPIEndpoints:
     
     def test_query_with_custom_parameters(self, client, mock_vector_store, mock_embedding_generator):
         """Test query with custom parameters."""
-        response = client.post(
-            "/api/v1/query",
-            json={
-                "query": "test query",
-                "limit": 10,
-                "similarity_threshold": 0.8,
-                "filters": {"source": "test.pdf"},
-                "generate_answer": True
+        with patch('src.processing.react_agent.process_query_with_agent') as mock_agent:
+            mock_agent.return_value = {
+                "results": [{"text": "Test", "score": 0.9}],
+                "answer": "Generated answer",
+                "total_results": 1
             }
-        )
+            
+            response = client.post(
+                "/api/v1/query",
+                json={
+                    "query": "test query",
+                    "limit": 10,
+                    "similarity_threshold": 0.8,
+                    "filters": {"source": "test.pdf"},
+                    "generate_answer": True
+                }
+            )
         
         assert response.status_code == 200
-        # Verify parameters were passed correctly
-        mock_vector_store.hybrid_search.assert_called()
-        call_args = mock_vector_store.hybrid_search.call_args
-        assert call_args[1]["limit"] == 10
-        assert call_args[1]["similarity_threshold"] == 0.8
+        # Verify the agent was called with correct parameters
+        mock_agent.assert_called_once()
+        # Check that search_params were passed
+        call_args = mock_agent.call_args
+        assert "search_params" in call_args[1]
+        assert call_args[1]["search_params"]["limit"] == 10
+        assert call_args[1]["search_params"]["similarity_threshold"] == 0.8
     
     def test_ingest_with_chunking_strategy(self, client, mock_job_tracker):
         """Test document ingestion with specific chunking strategy."""
@@ -364,15 +393,15 @@ class TestAPIErrorHandling:
     
     def test_internal_server_error(self, client):
         """Test handling of internal server errors."""
-        with patch('src.api.routes.vector_store.hybrid_search') as mock_search:
-            with patch('src.api.routes.embedding_generator.generate_embeddings') as mock_embed:
-                # Make the embedding generation fail to trigger 500 error
-                mock_embed.side_effect = Exception("Embedding service error")
-                
-                response = client.post(
-                    "/api/v1/query",
-                    json={"query": "test"}
-                )
+        with patch('src.api.routes.get_embedding_generator') as mock_get_gen:
+            mock_gen = Mock()
+            mock_gen.generate_embeddings = AsyncMock(side_effect=Exception("Embedding service error"))
+            mock_get_gen.return_value = mock_gen
+            
+            response = client.post(
+                "/api/v1/query",
+                json={"query": "test"}
+            )
         
         assert response.status_code == 500
         assert "Query processing failed" in response.json()["detail"]

@@ -22,8 +22,7 @@ class TestSettings:
             assert config.api_workers == 4
             
             # Vector DB defaults
-            assert config.qdrant_host == "localhost"
-            assert config.qdrant_port == 6333
+            assert config.qdrant_url == "http://localhost:6333"
             assert config.qdrant_collection == "documents"
             
             # Redis defaults
@@ -37,8 +36,12 @@ class TestSettings:
             assert config.batch_size == 32
             
             # Embedding defaults
-            assert config.embedding_model == "sentence-transformers/all-MiniLM-L6-v2"
-            assert config.embedding_dimension == 384
+            assert config.embedding_model == "text-embedding-3-small"
+            assert config.embedding_dimension == 1536
+            
+            # OpenAI defaults
+            assert config.openai_model in ["gpt-3.5-turbo", "gpt-4o"]  # Accept either default or env value
+            assert config.openai_api_key == "test-key"
             
             # Search defaults
             assert config.similarity_threshold == 0.4
@@ -51,9 +54,11 @@ class TestSettings:
             "OPENAI_API_KEY": "test-key-123",
             "API_HOST": "127.0.0.1",
             "API_PORT": "9000",
-            "QDRANT_HOST": "qdrant.example.com",
+            "QDRANT_URL": "https://qdrant.example.com:6333",
             "REDIS_HOST": "redis.example.com",
-            "CHUNK_SIZE": "1024"
+            "CHUNK_SIZE": "1024",
+            "EMBEDDING_MODEL": "text-embedding-ada-002",
+            "EMBEDDING_DIMENSION": "1536"
         }
         
         with patch.dict(os.environ, test_env, clear=True):
@@ -61,9 +66,11 @@ class TestSettings:
             
             assert config.api_host == "127.0.0.1"
             assert config.api_port == 9000  # Should be converted to int
-            assert config.qdrant_host == "qdrant.example.com"
+            assert config.qdrant_url == "https://qdrant.example.com:6333"
             assert config.redis_host == "redis.example.com"
             assert config.chunk_size == 1024
+            assert config.embedding_model == "text-embedding-ada-002"
+            assert config.embedding_dimension == 1536
             assert config.openai_api_key == "test-key-123"
     
     def test_openai_configuration(self):
@@ -109,7 +116,7 @@ class TestSettings:
         test_env = {
             "OPENAI_API_KEY": "test-key",
             "API_PORT": "8080",
-            "QDRANT_PORT": "6334",
+            "REDIS_PORT": "6380",
             "SIMILARITY_THRESHOLD": "0.75",
             "ENABLE_METRICS": "true"
         }
@@ -119,8 +126,8 @@ class TestSettings:
             
             assert isinstance(config.api_port, int)
             assert config.api_port == 8080
-            assert isinstance(config.qdrant_port, int)
-            assert config.qdrant_port == 6334
+            assert isinstance(config.redis_port, int)
+            assert config.redis_port == 6380
             assert isinstance(config.similarity_threshold, float)
             assert config.similarity_threshold == 0.75
             assert isinstance(config.enable_metrics, bool)
