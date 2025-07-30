@@ -75,9 +75,12 @@ dmypy.json
 .pyre/
 
 # Application logs
-streamlit.log
+logs/
 api.log
 *.log
+
+# Assignment and project files (not part of production code)
+assignment/
 
 # macOS
 .DS_Store
