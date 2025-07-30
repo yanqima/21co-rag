@@ -234,6 +234,73 @@ docker-compose up -d
   - No additional instrumentation needed
   - Simple aggregation from Redis
 
+## ⚙️ Environment Configuration
+
+**🔐 Security Note**: Environment files containing real API keys are not tracked in git for security reasons.
+
+### Required Environment Files
+
+You need to create these files from the template:
+
+```bash
+# Create environment files (required for all deployments)
+cp .env.example .env      # For local development
+cp .env.example .env.gcp  # For cloud deployment (if needed)
+```
+
+### Configuration Options
+
+#### **`.env`** - Local Development
+```bash
+# Required: Add your OpenAI API key
+OPENAI_API_KEY=sk-proj-your-key-here
+OPENAI_MODEL=gpt-4o
+
+# Local Qdrant (via Docker)
+QDRANT_URL=http://localhost:6333
+QDRANT_COLLECTION=documents
+
+# Local Redis (via Docker)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+```
+
+#### **`.env.gcp`** - Cloud Deployment
+```bash
+# Required: Add your OpenAI API key
+OPENAI_API_KEY=sk-proj-your-key-here
+OPENAI_MODEL=gpt-4o
+
+# Qdrant Cloud (recommended for production)
+QDRANT_URL=https://your-cluster.gcp.cloud.qdrant.io
+QDRANT_API_KEY=your-qdrant-api-key
+QDRANT_COLLECTION=documents
+
+# Cloud Redis (Google Cloud Memorystore)
+REDIS_HOST=your-redis-internal-ip
+REDIS_PORT=6379
+
+# Embedding Configuration
+EMBEDDING_MODEL=text-embedding-3-small
+EMBEDDING_DIMENSION=1536
+```
+
+### Getting API Keys
+
+1. **OpenAI API Key**: 
+   - Visit https://platform.openai.com/api-keys
+   - Create a new API key
+   - Add billing information for usage
+
+2. **Qdrant Cloud** (for production):
+   - Visit https://cloud.qdrant.io
+   - Create a free cluster
+   - Get your cluster URL and API key
+
+3. **Google Cloud Redis** (for cloud deployment):
+   - Create a Cloud Memorystore Redis instance
+   - Use the internal IP address
+
 ## 🏗️ Architecture
 
 ```
@@ -269,12 +336,21 @@ docker-compose up -d
 
 **🚀 Fully optimized Docker setup with fast builds and production-ready containers**
 
-1. **Clone and setup**:
+1. **Clone and setup environment**:
    ```bash
    git clone <repository-url>
    cd 21co-rag
+   
+   # Create environment files (not tracked in git for security)
    cp .env.example .env
-   # Edit .env with your OpenAI API key
+   cp .env.example .env.gcp
+   
+   # Edit .env for local development
+   # Add your OpenAI API key: OPENAI_API_KEY=sk-proj-...
+   
+   # Edit .env.gcp for cloud deployment (if needed)
+   # Add Qdrant Cloud URL and API key
+   # Add Cloud Redis configuration
    ```
 
 2. **Start all services**:
