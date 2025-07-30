@@ -55,7 +55,10 @@ ipython_config.py
 .python-version
 
 # Environments
+# Environment files (contains secrets)
 .env
+.env.*
+!.env.example
 .venv
 env/
 venv/
