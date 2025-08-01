@@ -55,10 +55,7 @@ ipython_config.py
 .python-version
 
 # Environments
-# Environment files (contains secrets)
 .env
-.env.*
-!.env.example
 .venv
 env/
 venv/
@@ -75,12 +72,9 @@ dmypy.json
 .pyre/
 
 # Application logs
-logs/
+streamlit.log
 api.log
 *.log
-
-# Assignment and project files (not part of production code)
-assignment/
 
 # macOS
 .DS_Store
@@ -98,3 +92,6 @@ assignment/
 Dockerfile
 !Dockerfile.cloudrun
 !Dockerfile.streamlit
+assignment/
+.env.deploy
+.env.gcp

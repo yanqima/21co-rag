@@ -27,6 +27,141 @@ docker-compose up -d
 ./deploy-gcp.sh
 ```
 
+## ⚙️ Environment Setup & Deployment
+
+### 📁 Environment Files Overview
+
+This project uses three different environment files for different purposes:
+
+| File | Purpose | Required For | Can Be Committed |
+|------|---------|--------------|------------------|
+| `.env` | Local development configuration | Local development | ❌ No (contains API keys) |
+| `.env.gcp` | GCP Cloud Run environment variables | Cloud deployment | ❌ No (contains secrets) |
+| `.env.deploy` | GCP deployment configuration | Cloud deployment | ✅ Yes (no secrets) |
+
+### 🔧 Environment File Details
+
+#### `.env` - Local Development
+Used for local development with Docker Compose or direct Python execution.
+
+**Setup:**
+```bash
+cp .env.example .env
+# Edit .env with your API keys
+```
+
+**Key Variables:**
+```env
+# OpenAI Configuration
+OPENAI_API_KEY=your-openai-api-key-here
+OPENAI_MODEL=gpt-4o
+
+# Local Services (Docker)
+QDRANT_HOST=localhost
+QDRANT_PORT=6333
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# API Configuration  
+API_HOST=0.0.0.0
+API_PORT=8000
+ENVIRONMENT=development
+```
+
+#### `.env.gcp` - Cloud Run Environment Variables
+Contains all runtime environment variables for the deployed Cloud Run services.
+
+**Key Variables:**
+```env
+# OpenAI Configuration
+OPENAI_API_KEY=your-production-openai-key
+OPENAI_MODEL=gpt-4o
+
+# Qdrant Cloud Configuration
+QDRANT_URL=https://your-cluster.qdrant.io
+QDRANT_API_KEY=your-qdrant-api-key
+QDRANT_COLLECTION=documents
+
+# Cloud Memorystore Redis
+REDIS_HOST=10.x.x.x  # Private IP from GCP
+REDIS_PORT=6379
+REDIS_DB=0
+
+# Production Settings
+ENVIRONMENT=production
+LOG_LEVEL=INFO
+```
+
+#### `.env.deploy` - Deployment Configuration
+Contains GCP deployment parameters (project ID, region, service names).
+
+**Setup:**
+```bash
+cp deploy.config.example .env.deploy
+# Edit .env.deploy with your GCP project details
+```
+
+**Key Variables:**
+```env
+# GCP Project Configuration
+PROJECT_ID=your-gcp-project-id
+REGION=europe-west1
+
+# Cloud Run Service Names
+SERVICE_NAME_API=rag-api
+SERVICE_NAME_STREAMLIT=rag-streamlit
+```
+
+### 🚀 Deployment Process
+
+#### Option 1: Configuration File (Recommended)
+```bash
+# 1. Set up deployment config
+cp deploy.config.example .env.deploy
+# Edit .env.deploy with your GCP project ID
+
+# 2. Deploy
+./deploy-gcp.sh
+```
+
+#### Option 2: Environment Variables
+```bash
+export PROJECT_ID="your-project-id"
+export REGION="europe-west1"
+./deploy-gcp.sh
+```
+
+#### Option 3: Interactive Prompts
+```bash
+./deploy-gcp.sh
+# Script will prompt for each parameter
+```
+
+### 📋 Pre-Deployment Checklist
+
+Before running `./deploy-gcp.sh`, ensure:
+
+- [ ] **GCP Setup**
+  - [ ] `gcloud` CLI installed and authenticated
+  - [ ] GCP project created with billing enabled
+  - [ ] APIs enabled: Cloud Run, Cloud Build, Memorystore Redis
+
+- [ ] **Environment Files**
+  - [ ] `.env.gcp` configured with production API keys
+  - [ ] `.env.deploy` configured with your project details
+
+- [ ] **External Services**
+  - [ ] Qdrant Cloud cluster created and URL/API key added to `.env.gcp`
+  - [ ] Cloud Memorystore Redis instance created and IP added to `.env.gcp`
+  - [ ] OpenAI API key added to `.env.gcp`
+
+### 🔐 Security Best Practices
+
+- **Never commit** `.env` or `.env.gcp` files (they contain secrets)
+- **Do commit** `.env.deploy` (contains no secrets, just configuration)
+- Use **different API keys** for development (`.env`) and production (`.env.gcp`)
+- **Rotate keys regularly** and use GCP Secret Manager for production
+
 ## 🌐 **Live Deployment Status**
 
 **✅ Currently Deployed & Operational:**
@@ -234,73 +369,6 @@ docker-compose up -d
   - No additional instrumentation needed
   - Simple aggregation from Redis
 
-## ⚙️ Environment Configuration
-
-**🔐 Security Note**: Environment files containing real API keys are not tracked in git for security reasons.
-
-### Required Environment Files
-
-You need to create these files from the template:
-
-```bash
-# Create environment files (required for all deployments)
-cp .env.example .env      # For local development
-cp .env.example .env.gcp  # For cloud deployment (if needed)
-```
-
-### Configuration Options
-
-#### **`.env`** - Local Development
-```bash
-# Required: Add your OpenAI API key
-OPENAI_API_KEY=sk-proj-your-key-here
-OPENAI_MODEL=gpt-4o
-
-# Local Qdrant (via Docker)
-QDRANT_URL=http://localhost:6333
-QDRANT_COLLECTION=documents
-
-# Local Redis (via Docker)
-REDIS_HOST=localhost
-REDIS_PORT=6379
-```
-
-#### **`.env.gcp`** - Cloud Deployment
-```bash
-# Required: Add your OpenAI API key
-OPENAI_API_KEY=sk-proj-your-key-here
-OPENAI_MODEL=gpt-4o
-
-# Qdrant Cloud (recommended for production)
-QDRANT_URL=https://your-cluster.gcp.cloud.qdrant.io
-QDRANT_API_KEY=your-qdrant-api-key
-QDRANT_COLLECTION=documents
-
-# Cloud Redis (Google Cloud Memorystore)
-REDIS_HOST=your-redis-internal-ip
-REDIS_PORT=6379
-
-# Embedding Configuration
-EMBEDDING_MODEL=text-embedding-3-small
-EMBEDDING_DIMENSION=1536
-```
-
-### Getting API Keys
-
-1. **OpenAI API Key**: 
-   - Visit https://platform.openai.com/api-keys
-   - Create a new API key
-   - Add billing information for usage
-
-2. **Qdrant Cloud** (for production):
-   - Visit https://cloud.qdrant.io
-   - Create a free cluster
-   - Get your cluster URL and API key
-
-3. **Google Cloud Redis** (for cloud deployment):
-   - Create a Cloud Memorystore Redis instance
-   - Use the internal IP address
-
 ## 🏗️ Architecture
 
 ```
@@ -336,21 +404,12 @@ EMBEDDING_DIMENSION=1536
 
 **🚀 Fully optimized Docker setup with fast builds and production-ready containers**
 
-1. **Clone and setup environment**:
+1. **Clone and setup**:
    ```bash
    git clone <repository-url>
    cd 21co-rag
-   
-   # Create environment files (not tracked in git for security)
    cp .env.example .env
-   cp .env.example .env.gcp
-   
-   # Edit .env for local development
-   # Add your OpenAI API key: OPENAI_API_KEY=sk-proj-...
-   
-   # Edit .env.gcp for cloud deployment (if needed)
-   # Add Qdrant Cloud URL and API key
-   # Add Cloud Redis configuration
+   # Edit .env with your OpenAI API key
    ```
 
 2. **Start all services**:
@@ -541,35 +600,37 @@ See [deployment guide](handover/deployment_guide.md) for:
 
 ## 📊 Configuration
 
-Key environment variables:
+> 💡 **For complete environment setup instructions, see the [Environment Setup & Deployment](#️-environment-setup--deployment) section above.**
+
+### Advanced Configuration Options
+
+Additional environment variables for fine-tuning:
 
 ```env
-# API Settings
-API_HOST=0.0.0.0
-API_PORT=8000
-ENVIRONMENT=production
-
-# OpenAI
-OPENAI_API_KEY=your-key
-OPENAI_MODEL=gpt-3.5-turbo
-EMBEDDING_MODEL=text-embedding-ada-002
-
-# Vector Database
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-COLLECTION_NAME=documents
-
 # Search Settings
-SIMILARITY_THRESHOLD=0.7
-SEARCH_LIMIT=10
-HYBRID_SEARCH_ALPHA=0.5
+SIMILARITY_THRESHOLD=0.7        # Minimum similarity for search results (0.0-1.0)
+SEARCH_LIMIT=10                 # Maximum number of search results
+HYBRID_SEARCH_ALPHA=0.5         # Balance between semantic and keyword search
 
-# Performance
-CHUNK_SIZE=512
-CHUNK_OVERLAP=50
-BATCH_SIZE=32
-MAX_FILE_SIZE_MB=50
+# Document Processing
+CHUNK_SIZE=512                  # Text chunk size for embeddings
+CHUNK_OVERLAP=50                # Character overlap between chunks
+BATCH_SIZE=32                   # Batch size for processing
+MAX_FILE_SIZE_MB=50             # Maximum upload file size
+
+# Performance & Monitoring
+LOG_LEVEL=INFO                  # Logging level (DEBUG, INFO, WARNING, ERROR)
+RATE_LIMIT_PER_MINUTE=100       # API rate limiting
 ```
+
+### Configuration Hierarchy
+
+Settings are loaded in the following order (later values override earlier ones):
+
+1. **Default values** (in code)
+2. **Environment file** (`.env`, `.env.gcp`)
+3. **Environment variables** (system environment)
+4. **Runtime parameters** (CLI arguments, function parameters)
 
 ## 🎯 Demo Guide
 

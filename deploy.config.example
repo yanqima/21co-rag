@@ -1,0 +1,15 @@
+# GCP Deployment Configuration
+# Copy this file to .env.deploy and update the values for your project
+
+# Your GCP Project ID
+PROJECT_ID=your-project-id-here
+
+# GCP Region for deployment
+REGION=europe-west1
+
+# Cloud Run service names
+SERVICE_NAME_API=rag-api
+SERVICE_NAME_STREAMLIT=rag-streamlit
+
+# Optional: VPC Connector name (if using VPC)
+# VPC_CONNECTOR=rag-connector 
